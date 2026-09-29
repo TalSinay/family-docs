@@ -27,6 +27,13 @@ export async function connectToDatabase() {
   if (!cache.promise) {
     cache.promise = mongoose.connect(MONGODB_URI as string, {
       bufferCommands: false,
+      // מגביל את מספר החיבורים המקבילים ל-Mongo. ברירת המחדל (עד 100) פותחת
+      // הרבה handshake-ים בו-זמנית, ורשתות מסוימות (VPN/פרוקסי ארגוני) גורמות
+      // לחלק מהם להיכשל ב-auth בצורה לא עקבית. מספר נמוך יותר פותר את זה,
+      // ומספיק בנוחות לשימוש משפחתי (עד 10 משתמשים בו-זמנית).
+      maxPoolSize: 5,
+      minPoolSize: 1,
+      serverSelectionTimeoutMS: 10000,
     });
   }
 
