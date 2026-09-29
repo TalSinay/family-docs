@@ -1,4 +1,7 @@
 import mongoose, { Schema, models, model } from "mongoose";
+// ייבוא צד-אפקט: מבטיח שמודל "User" נרשם ב-mongoose לפני populate("createdBy"),
+// גם כשהקובץ הזה נטען לבדו ב-bundle נפרד (serverless function) שלא ייבא את User.ts ישירות.
+import "@/lib/models/User";
 
 export interface ICalendarEvent {
   _id: mongoose.Types.ObjectId;

@@ -1,5 +1,8 @@
 import mongoose, { Schema, models, model } from "mongoose";
 import { MAIN_CATEGORIES } from "@/lib/categories";
+// ייבוא צד-אפקט: מבטיח שמודל "User" נרשם ב-mongoose לפני populate("uploadedBy"),
+// גם כשהקובץ הזה נטען לבדו ב-bundle נפרד (serverless function) שלא ייבא את User.ts ישירות.
+import "@/lib/models/User";
 
 export interface ICustomField {
   key: string;
