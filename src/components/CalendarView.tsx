@@ -18,15 +18,29 @@ function ymd(d: Date) {
 }
 
 export function CalendarView() {
-  const todayStr = ymd(new Date());
+  // "מה היום" נקבע אך ורק בדפדפן (לא בשרת), כדי שלא יהיה פער בין אזור הזמן
+  // של השרת לזה של המשתמש - וכדי שה-HTML הראשוני יהיה זהה בשרת ובלקוח.
+  const [mounted, setMounted] = useState(false);
+  const [cursor, setCursor] = useState(() => new Date(2026, 0, 1));
+  const [todayStr, setTodayStr] = useState("");
+  const [selectedDay, setSelectedDay] = useState("");
 
-  const [cursor, setCursor] = useState(() => new Date());
   const [holidays, setHolidays] = useState<Holiday[]>([]);
   const [events, setEvents] = useState<EventItem[]>([]);
-  // ברירת המחדל היא היום - כך רואים מיד מה יש היום בלי ללחוץ על שום דבר
-  const [selectedDay, setSelectedDay] = useState<string>(todayStr);
   const [newEventTitle, setNewEventTitle] = useState("");
   const [newEventNotes, setNewEventNotes] = useState("");
+
+  useEffect(() => {
+    const now = new Date();
+    const today = ymd(now);
+    /* eslint-disable react-hooks/set-state-in-effect -- קביעת "מה היום" בכוונה רק
+       אחרי עליית הרכיב בדפדפן, כדי שהתאריך יחושב לפי אזור הזמן של המשתמש ולא של השרת */
+    setCursor(now);
+    setTodayStr(today);
+    setSelectedDay(today);
+    setMounted(true);
+    /* eslint-enable react-hooks/set-state-in-effect */
+  }, []);
 
   const year = cursor.getFullYear();
   const month = cursor.getMonth(); // 0-based
@@ -50,6 +64,8 @@ export function CalendarView() {
       const data = await res.json();
       const items: Holiday[] = (data.items || [])
         .filter((i: { category?: string }) => i.category === "holiday")
+        // חלק מהערכים מ-Hebcal מגיעים כ-"YYYY-MM-DDTHH:mm:ss+TZ" - לוקחים רק את תאריך הלוח,
+        // לא ממירים ל-UTC (Date.parse), כדי שלא "יזוז" יום בגלל הפרש אזור זמן.
         .map((i: { date: string; title: string }) => ({ date: i.date.slice(0, 10), title: i.title }));
       setHolidays(items);
     } catch {
@@ -65,10 +81,11 @@ export function CalendarView() {
   }, [year, month]);
 
   useEffect(() => {
+    if (!mounted) return;
     // eslint-disable-next-line react-hooks/set-state-in-effect -- טעינת נתונים לפי חודש, לא לולאת render
     fetchHolidays();
     fetchEvents();
-  }, [fetchHolidays, fetchEvents]);
+  }, [mounted, fetchHolidays, fetchEvents]);
 
   function eventsForDay(dateStr: string) {
     return events.filter((e) => e.date === dateStr);
@@ -96,15 +113,23 @@ export function CalendarView() {
     if (res.ok) fetchEvents();
   }
 
-  const selectedDayLabel = useMemo(
-    () =>
-      new Intl.DateTimeFormat("he-IL", { weekday: "long", day: "numeric", month: "long" }).format(
-        new Date(selectedDay)
-      ),
-    [selectedDay]
-  );
+  // בונים תווית תאריך "ידנית" (בלי new Date(selectedDay)) כדי למנוע כל בעיית פרשנות UTC
+  const selectedDayLabel = useMemo(() => {
+    if (!selectedDay) return "";
+    const [y, m, d] = selectedDay.split("-").map(Number);
+    return new Intl.DateTimeFormat("he-IL", { weekday: "long", day: "numeric", month: "long" }).format(
+      new Date(y, m - 1, d)
+    );
+  }, [selectedDay]);
+
   const selectedHolidays = holidaysForDay(selectedDay);
   const selectedEvents = eventsForDay(selectedDay);
+
+  if (!mounted) {
+    return (
+      <div className="card p-8 text-center text-sm text-slate-400">טוען לוח שנה...</div>
+    );
+  }
 
   return (
     <div className="space-y-4">
