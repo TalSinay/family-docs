@@ -12,6 +12,7 @@ import {
   Save,
 } from "lucide-react";
 import { formatDateTime, formatCurrency } from "@/lib/format";
+import { FINANCIAL_CATEGORIES } from "@/lib/categories";
 
 type CustomField = { key: string; value: string };
 
@@ -40,8 +41,14 @@ export function DocumentDetail({ doc: initialDoc }: { doc: DocData }) {
   const [doc, setDoc] = useState(initialDoc);
   const [notes, setNotes] = useState(initialDoc.notes || "");
   const [customFields, setCustomFields] = useState<CustomField[]>(initialDoc.customFields || []);
+  const [isMonthlyPayment, setIsMonthlyPayment] = useState(!!initialDoc.isMonthlyPayment);
+  const [monthlyAmount, setMonthlyAmount] = useState(
+    initialDoc.monthlyAmount != null ? String(initialDoc.monthlyAmount) : ""
+  );
   const [saving, setSaving] = useState(false);
   const [savedMsg, setSavedMsg] = useState("");
+
+  const isFinancial = FINANCIAL_CATEGORIES.includes(doc.category as (typeof FINANCIAL_CATEGORIES)[number]);
 
   async function patch(update: Record<string, unknown>) {
     const res = await fetch(`/api/documents/${doc._id}`, {
@@ -68,6 +75,8 @@ export function DocumentDetail({ doc: initialDoc }: { doc: DocData }) {
     const ok = await patch({
       notes,
       customFields: customFields.filter((cf) => cf.key.trim()),
+      isMonthlyPayment,
+      monthlyAmount: isMonthlyPayment && monthlyAmount ? Number(monthlyAmount) : undefined,
     });
     setSaving(false);
     setSavedMsg(ok ? "נשמר" : "שגיאה בשמירה");
@@ -160,6 +169,31 @@ export function DocumentDetail({ doc: initialDoc }: { doc: DocData }) {
           )}
         </div>
       </div>
+
+      {isFinancial && (
+        <div className="card p-5">
+          <label className="label">תשלום חודשי חוזר</label>
+          <label className="flex items-center gap-2 text-sm font-medium text-slate-600 mb-2">
+            <input
+              type="checkbox"
+              checked={isMonthlyPayment}
+              onChange={(e) => setIsMonthlyPayment(e.target.checked)}
+              className="rounded"
+            />
+            זו הוצאה/הכנסה חוזרת מדי חודש (ולא חד-פעמית)
+          </label>
+          {isMonthlyPayment && (
+            <input
+              type="number"
+              step="0.01"
+              className="input"
+              placeholder="סכום חודשי (₪)"
+              value={monthlyAmount}
+              onChange={(e) => setMonthlyAmount(e.target.value)}
+            />
+          )}
+        </div>
+      )}
 
       <div className="card p-5">
         <label className="label">הערות</label>

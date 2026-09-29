@@ -1,3 +1,8 @@
+export const HEBREW_MONTHS = [
+  "ינואר", "פברואר", "מרץ", "אפריל", "מאי", "יוני",
+  "יולי", "אוגוסט", "ספטמבר", "אוקטובר", "נובמבר", "דצמבר",
+];
+
 export function formatCurrency(amount: number | undefined | null) {
   if (amount === undefined || amount === null) return "—";
   return new Intl.NumberFormat("he-IL", {

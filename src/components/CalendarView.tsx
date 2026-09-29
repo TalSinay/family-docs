@@ -4,13 +4,11 @@ import { useEffect, useMemo, useState, useCallback } from "react";
 import { ChevronRight, ChevronLeft, Plus, Trash2 } from "lucide-react";
 import clsx from "clsx";
 
+import { HEBREW_MONTHS } from "@/lib/format";
+
 type Holiday = { date: string; title: string };
 type EventItem = { _id: string; title: string; date: string; notes?: string };
 
-const HEBREW_MONTHS = [
-  "ינואר", "פברואר", "מרץ", "אפריל", "מאי", "יוני",
-  "יולי", "אוגוסט", "ספטמבר", "אוקטובר", "נובמבר", "דצמבר",
-];
 const WEEKDAYS = ["א", "ב", "ג", "ד", "ה", "ו", "ש"];
 
 function ymd(d: Date) {
