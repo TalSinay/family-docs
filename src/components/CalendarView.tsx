@@ -3,7 +3,6 @@
 import { useEffect, useMemo, useState, useCallback } from "react";
 import { ChevronRight, ChevronLeft, Plus, Trash2 } from "lucide-react";
 import clsx from "clsx";
-import { Modal } from "./Modal";
 
 type Holiday = { date: string; title: string };
 type EventItem = { _id: string; title: string; date: string; notes?: string };
@@ -19,10 +18,13 @@ function ymd(d: Date) {
 }
 
 export function CalendarView() {
+  const todayStr = ymd(new Date());
+
   const [cursor, setCursor] = useState(() => new Date());
   const [holidays, setHolidays] = useState<Holiday[]>([]);
   const [events, setEvents] = useState<EventItem[]>([]);
-  const [selectedDay, setSelectedDay] = useState<string | null>(null);
+  // ברירת המחדל היא היום - כך רואים מיד מה יש היום בלי ללחוץ על שום דבר
+  const [selectedDay, setSelectedDay] = useState<string>(todayStr);
   const [newEventTitle, setNewEventTitle] = useState("");
   const [newEventNotes, setNewEventNotes] = useState("");
 
@@ -76,7 +78,7 @@ export function CalendarView() {
   }
 
   async function addEvent() {
-    if (!selectedDay || !newEventTitle.trim()) return;
+    if (!newEventTitle.trim()) return;
     const res = await fetch("/api/calendar-events", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -94,10 +96,18 @@ export function CalendarView() {
     if (res.ok) fetchEvents();
   }
 
-  const todayStr = ymd(new Date());
+  const selectedDayLabel = useMemo(
+    () =>
+      new Intl.DateTimeFormat("he-IL", { weekday: "long", day: "numeric", month: "long" }).format(
+        new Date(selectedDay)
+      ),
+    [selectedDay]
+  );
+  const selectedHolidays = holidaysForDay(selectedDay);
+  const selectedEvents = eventsForDay(selectedDay);
 
   return (
-    <div className="space-y-3">
+    <div className="space-y-4">
       <div className="card p-4">
         <div className="flex items-center justify-between mb-3">
           <button
@@ -130,28 +140,99 @@ export function CalendarView() {
             const dayEvents = eventsForDay(dateStr);
             const dayHolidays = holidaysForDay(dateStr);
             const isToday = dateStr === todayStr;
+            const isSelected = dateStr === selectedDay;
 
             return (
               <button
                 key={i}
                 onClick={() => setSelectedDay(dateStr)}
                 className={clsx(
-                  "aspect-square rounded-lg flex flex-col items-center justify-center text-sm relative hover:bg-teal-50 transition-colors",
-                  isToday && "bg-teal-700 text-white hover:bg-teal-800"
+                  "aspect-square rounded-lg flex flex-col items-center justify-center text-sm relative transition-colors",
+                  isSelected
+                    ? "bg-teal-700 text-white"
+                    : isToday
+                      ? "bg-teal-50 text-teal-800 ring-1 ring-teal-300"
+                      : "hover:bg-slate-100"
                 )}
               >
                 {d.getDate()}
                 <div className="flex gap-0.5 mt-0.5">
                   {dayHolidays.length > 0 && (
-                    <span className={clsx("w-1.5 h-1.5 rounded-full", isToday ? "bg-white" : "bg-amber-500")} />
+                    <span className={clsx("w-1.5 h-1.5 rounded-full", isSelected ? "bg-white" : "bg-amber-500")} />
                   )}
                   {dayEvents.length > 0 && (
-                    <span className={clsx("w-1.5 h-1.5 rounded-full", isToday ? "bg-white" : "bg-teal-600")} />
+                    <span className={clsx("w-1.5 h-1.5 rounded-full", isSelected ? "bg-white" : "bg-teal-600")} />
                   )}
                 </div>
               </button>
             );
           })}
+        </div>
+      </div>
+
+      {/* סדר היום של היום הנבחר - מוצג תמיד, בלי צורך בלחיצה נוספת */}
+      <div className="card p-5">
+        <div className="flex items-center justify-between mb-3">
+          <h2 className="font-bold">
+            {selectedDay === todayStr ? "היום" : selectedDayLabel}
+          </h2>
+          {selectedDay === todayStr ? (
+            <span className="text-xs text-teal-700 bg-teal-50 rounded-full px-2.5 py-1">עכשיו</span>
+          ) : (
+            <button onClick={() => setSelectedDay(todayStr)} className="text-xs text-teal-700 font-medium">
+              חזרה להיום
+            </button>
+          )}
+        </div>
+        {selectedDay !== todayStr && (
+          <p className="text-sm text-slate-500 -mt-2 mb-3">{selectedDayLabel}</p>
+        )}
+
+        <div className="space-y-2 mb-4">
+          {selectedHolidays.map((h) => (
+            <div key={h.title} className="bg-amber-50 text-amber-800 rounded-xl px-3 py-2 text-sm">
+              🕎 {h.title}
+            </div>
+          ))}
+
+          {selectedEvents.map((e) => (
+            <div key={e._id} className="flex items-start justify-between gap-2 bg-slate-50 rounded-xl px-3 py-2">
+              <div>
+                <p className="font-medium text-sm">{e.title}</p>
+                {e.notes && <p className="text-xs text-slate-500">{e.notes}</p>}
+              </div>
+              <button onClick={() => deleteEvent(e._id)} className="text-slate-400 hover:text-red-600 shrink-0">
+                <Trash2 size={16} />
+              </button>
+            </div>
+          ))}
+
+          {selectedHolidays.length === 0 && selectedEvents.length === 0 && (
+            <p className="text-sm text-slate-400">אין אירועים ביום הזה.</p>
+          )}
+        </div>
+
+        <div className="border-t border-slate-100 pt-3 space-y-2">
+          <input
+            className="input"
+            placeholder="הוסף אירוע חדש ליום הזה..."
+            value={newEventTitle}
+            onChange={(e) => setNewEventTitle(e.target.value)}
+            onKeyDown={(e) => e.key === "Enter" && addEvent()}
+          />
+          {newEventTitle && (
+            <>
+              <input
+                className="input"
+                placeholder="הערות (אופציונלי)"
+                value={newEventNotes}
+                onChange={(e) => setNewEventNotes(e.target.value)}
+              />
+              <button onClick={addEvent} className="btn-primary w-full flex items-center justify-center gap-2">
+                <Plus size={16} /> הוסף אירוע
+              </button>
+            </>
+          )}
         </div>
       </div>
 
@@ -163,57 +244,6 @@ export function CalendarView() {
           <span className="w-1.5 h-1.5 rounded-full bg-teal-600" /> אירוע
         </span>
       </div>
-
-      <Modal
-        open={!!selectedDay}
-        onClose={() => setSelectedDay(null)}
-        title={selectedDay ? new Intl.DateTimeFormat("he-IL", { day: "numeric", month: "long", year: "numeric" }).format(new Date(selectedDay)) : ""}
-      >
-        {selectedDay && (
-          <div className="space-y-4">
-            {holidaysForDay(selectedDay).map((h) => (
-              <div key={h.title} className="bg-amber-50 text-amber-800 rounded-xl px-3 py-2 text-sm">
-                🕎 {h.title}
-              </div>
-            ))}
-
-            <div className="space-y-2">
-              {eventsForDay(selectedDay).map((e) => (
-                <div key={e._id} className="flex items-start justify-between gap-2 bg-slate-50 rounded-xl px-3 py-2">
-                  <div>
-                    <p className="font-medium text-sm">{e.title}</p>
-                    {e.notes && <p className="text-xs text-slate-500">{e.notes}</p>}
-                  </div>
-                  <button onClick={() => deleteEvent(e._id)} className="text-slate-400 hover:text-red-600 shrink-0">
-                    <Trash2 size={16} />
-                  </button>
-                </div>
-              ))}
-              {eventsForDay(selectedDay).length === 0 && (
-                <p className="text-sm text-slate-400">אין עדיין אירועים ביום הזה.</p>
-              )}
-            </div>
-
-            <div className="border-t border-slate-100 pt-4 space-y-2">
-              <input
-                className="input"
-                placeholder="כותרת האירוע"
-                value={newEventTitle}
-                onChange={(e) => setNewEventTitle(e.target.value)}
-              />
-              <input
-                className="input"
-                placeholder="הערות (אופציונלי)"
-                value={newEventNotes}
-                onChange={(e) => setNewEventNotes(e.target.value)}
-              />
-              <button onClick={addEvent} className="btn-primary w-full flex items-center justify-center gap-2">
-                <Plus size={16} /> הוסף אירוע
-              </button>
-            </div>
-          </div>
-        )}
-      </Modal>
     </div>
   );
 }
