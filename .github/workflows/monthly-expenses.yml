@@ -1,0 +1,16 @@
+name: Monthly Expenses Automation
+
+on:
+  schedule:
+    # רץ ב-00:05 UTC בכל 1 לחודש (~03:05 שעון ישראל בקיץ)
+    - cron: "5 0 1 * *"
+  workflow_dispatch: {} # מאפשר גם הפעלה ידנית מטאב Actions ב-GitHub
+
+jobs:
+  trigger-monthly-expenses:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Call monthly expenses endpoint
+        run: |
+          curl -sf -X POST "${{ secrets.APP_URL }}/api/cron/monthly-expenses" \
+            -H "Authorization: Bearer ${{ secrets.CRON_SECRET }}"
