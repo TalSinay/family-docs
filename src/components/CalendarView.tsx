@@ -23,15 +23,30 @@ type CalItem = {
 
 const WEEKDAYS = ["א", "ב", "ג", "ד", "ה", "ו", "ש"];
 
-const KIND_STYLES: Record<CalItem["kind"], string> = {
-  holiday: "bg-amber-100 text-amber-800",
-  event: "bg-teal-100 text-teal-800",
-  task: "bg-violet-100 text-violet-800",
-  document: "bg-orange-100 text-orange-800",
+const KIND_DOT: Record<CalItem["kind"], string> = {
+  holiday: "bg-amber-500",
+  event: "bg-teal-600",
+  task: "bg-violet-500",
+  document: "bg-orange-500",
+};
+
+const KIND_ROW_STYLES: Record<CalItem["kind"], string> = {
+  holiday: "bg-amber-50 text-amber-800",
+  event: "bg-slate-50 text-slate-800",
+  task: "bg-violet-50 text-violet-800",
+  document: "bg-orange-50 text-orange-800",
 };
 
 function ymd(d: Date) {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+}
+
+// תווית תאריך "ידנית" מ-"YYYY-MM-DD" (בלי new Date(str) שמפורש כ-UTC) כדי למנוע היסט יום
+function formatDayHeader(dateStr: string) {
+  const [y, m, d] = dateStr.split("-").map(Number);
+  return new Intl.DateTimeFormat("he-IL", { weekday: "long", day: "numeric", month: "long" }).format(
+    new Date(y, m - 1, d)
+  );
 }
 
 export function CalendarView() {
@@ -120,8 +135,7 @@ export function CalendarView() {
     fetchDocDues();
   }, [mounted, fetchHolidays, fetchEvents, fetchTasks, fetchDocDues]);
 
-  // כל הפריטים (חגים, אירועים, משימות עם תאריך יעד, מסמכים עם תאריך יעד) מקובצים לפי יום,
-  // כדי שיוצגו ישירות בתא של כל יום בתצוגת החודש - בלי צורך ללחוץ על היום
+  // כל הפריטים (חגים, אירועים, משימות עם תאריך יעד, מסמכים עם תאריך יעד) מקובצים לפי יום
   const itemsByDay = useMemo(() => {
     const map = new Map<string, CalItem[]>();
     const push = (date: string, item: CalItem) => {
@@ -147,6 +161,16 @@ export function CalendarView() {
     return itemsByDay.get(dateStr) || [];
   }
 
+  // כל התאריכים בחודש המוצג שיש בהם משהו, לפי סדר כרונולוגי - לרשימת "כל החודש" למטה,
+  // שמוצגת תמיד ואינה תלויה בבחירת יום ספציפי
+  const monthDatesWithItems = useMemo(() => {
+    return days
+      .filter((d): d is Date => !!d)
+      .map((d) => ymd(d))
+      .filter((dateStr) => itemsForDay(dateStr).length > 0);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [days, itemsByDay]);
+
   async function addEvent() {
     if (!newEventTitle.trim()) return;
     const res = await fetch("/api/calendar-events", {
@@ -166,20 +190,61 @@ export function CalendarView() {
     if (res.ok) fetchEvents();
   }
 
-  // בונים תווית תאריך "ידנית" (בלי new Date(selectedDay)) כדי למנוע כל בעיית פרשנות UTC
-  const selectedDayLabel = useMemo(() => {
-    if (!selectedDay) return "";
-    const [y, m, d] = selectedDay.split("-").map(Number);
-    return new Intl.DateTimeFormat("he-IL", { weekday: "long", day: "numeric", month: "long" }).format(
-      new Date(y, m - 1, d)
-    );
-  }, [selectedDay]);
-
+  const selectedDayLabel = selectedDay ? formatDayHeader(selectedDay) : "";
   const selectedItems = itemsForDay(selectedDay);
 
   if (!mounted) {
     return (
       <div className="card p-8 text-center text-sm text-slate-400">טוען לוח שנה...</div>
+    );
+  }
+
+  function renderItemRow(item: CalItem) {
+    if (item.kind === "holiday") {
+      return (
+        <div key={item.key} className={clsx("rounded-xl px-3 py-2 text-sm", KIND_ROW_STYLES.holiday)} dir="auto">
+          🕎 {item.title}
+        </div>
+      );
+    }
+    if (item.kind === "event") {
+      return (
+        <div
+          key={item.key}
+          className={clsx("flex items-start justify-between gap-2 rounded-xl px-3 py-2", KIND_ROW_STYLES.event)}
+        >
+          <div dir="auto">
+            <p className="font-medium text-sm">{item.title}</p>
+            {item.notes && <p className="text-xs text-slate-500">{item.notes}</p>}
+          </div>
+          <button onClick={() => item.id && deleteEvent(item.id)} className="text-slate-400 hover:text-red-600 shrink-0">
+            <Trash2 size={16} />
+          </button>
+        </div>
+      );
+    }
+    if (item.kind === "task") {
+      return (
+        <Link
+          key={item.key}
+          href="/tasks"
+          className={clsx("flex items-center gap-2 rounded-xl px-3 py-2 text-sm hover:bg-violet-100 transition-colors", KIND_ROW_STYLES.task)}
+          dir="auto"
+        >
+          <span className={clsx(item.done && "line-through opacity-60")}>✅ {item.title}</span>
+        </Link>
+      );
+    }
+    return (
+      <Link
+        key={item.key}
+        href={`/documents/${item.id}`}
+        className={clsx("flex items-center justify-between gap-2 rounded-xl px-3 py-2 text-sm hover:bg-orange-100 transition-colors", KIND_ROW_STYLES.document)}
+        dir="auto"
+      >
+        <span>📌 {item.title}</span>
+        <ExternalLink size={14} className="shrink-0" />
+      </Link>
     );
   }
 
@@ -210,13 +275,13 @@ export function CalendarView() {
           ))}
         </div>
 
-        <div className="grid grid-cols-7 gap-1.5">
+        <div className="grid grid-cols-7 gap-1">
           {days.map((d, i) => {
             if (!d) return <div key={i} />;
             const dateStr = ymd(d);
             const dayItems = itemsForDay(dateStr);
-            const visibleItems = dayItems.slice(0, 3);
-            const overflowCount = dayItems.length - visibleItems.length;
+            // עד 4 נקודות, אחת לכל סוג נוכח באותו יום (לא אחת לכל פריט, כדי שלא יתפוצץ ביום עמוס)
+            const kinds = Array.from(new Set(dayItems.map((it) => it.kind)));
             const isToday = dateStr === todayStr;
             const isSelected = dateStr === selectedDay;
 
@@ -225,41 +290,22 @@ export function CalendarView() {
                 key={i}
                 onClick={() => setSelectedDay(dateStr)}
                 className={clsx(
-                  "min-h-[86px] sm:min-h-[108px] rounded-lg flex flex-col items-stretch gap-1 p-1.5 text-right transition-colors overflow-hidden",
+                  "aspect-square rounded-lg flex flex-col items-center justify-center text-sm relative transition-colors",
                   isSelected
                     ? "bg-teal-700 text-white"
                     : isToday
-                      ? "bg-teal-50 ring-1 ring-teal-300"
+                      ? "bg-teal-50 text-teal-800 ring-1 ring-teal-300"
                       : "hover:bg-slate-100"
                 )}
               >
-                <span
-                  className={clsx(
-                    "text-sm font-medium self-end",
-                    isSelected ? "text-white" : isToday ? "text-teal-800" : "text-slate-600"
-                  )}
-                >
-                  {d.getDate()}
-                </span>
-                <div className="flex-1 flex flex-col gap-1 min-w-0">
-                  {visibleItems.map((item) => (
+                {d.getDate()}
+                <div className="flex gap-0.5 mt-0.5">
+                  {kinds.map((k) => (
                     <span
-                      key={item.key}
-                      className={clsx(
-                        "text-[10.5px] leading-tight rounded px-1 py-[2px] truncate w-full",
-                        isSelected ? "bg-white/20 text-white" : KIND_STYLES[item.kind],
-                        item.kind === "task" && item.done && !isSelected && "line-through opacity-60"
-                      )}
-                      title={item.title}
-                    >
-                      {item.title}
-                    </span>
+                      key={k}
+                      className={clsx("w-1.5 h-1.5 rounded-full", isSelected ? "bg-white" : KIND_DOT[k])}
+                    />
                   ))}
-                  {overflowCount > 0 && (
-                    <span className={clsx("text-[10px] leading-tight px-1", isSelected ? "text-white/80" : "text-slate-400")}>
-                      +{overflowCount} עוד
-                    </span>
-                  )}
                 </div>
               </button>
             );
@@ -267,81 +313,48 @@ export function CalendarView() {
         </div>
       </div>
 
-      {/* סדר היום של היום הנבחר - מוצג תמיד, בלי צורך בלחיצה נוספת */}
+      {/* רשימת כל החודש - מוצגת תמיד, בלי צורך לבחור יום ספציפי */}
+      <div className="card p-5">
+        <h2 className="font-bold mb-3">מה קורה החודש</h2>
+        <div className="space-y-4 max-h-[420px] overflow-y-auto">
+          {monthDatesWithItems.length === 0 && (
+            <p className="text-sm text-slate-400 text-center py-6">אין אירועים או משימות החודש.</p>
+          )}
+          {monthDatesWithItems.map((dateStr) => (
+            <div key={dateStr}>
+              <div className="flex items-center gap-2 mb-1.5">
+                <p className="text-xs font-semibold text-slate-500">{formatDayHeader(dateStr)}</p>
+                {dateStr === todayStr && (
+                  <span className="text-[10px] text-teal-700 bg-teal-50 rounded-full px-2 py-0.5">היום</span>
+                )}
+              </div>
+              <div className="space-y-1.5">{itemsForDay(dateStr).map(renderItemRow)}</div>
+            </div>
+          ))}
+        </div>
+      </div>
+
+      {/* הוספת אירוע ליום נבחר */}
       <div className="card p-5">
         <div className="flex items-center justify-between mb-3">
           <h2 className="font-bold">
-            {selectedDay === todayStr ? "היום" : selectedDayLabel}
+            {selectedDay === todayStr ? "הוסף אירוע להיום" : `הוסף אירוע ל-${selectedDayLabel}`}
           </h2>
-          {selectedDay === todayStr ? (
-            <span className="text-xs text-teal-700 bg-teal-50 rounded-full px-2.5 py-1">עכשיו</span>
-          ) : (
+          {selectedDay !== todayStr && (
             <button onClick={() => setSelectedDay(todayStr)} className="text-xs text-teal-700 font-medium">
               חזרה להיום
             </button>
           )}
         </div>
-        {selectedDay !== todayStr && (
-          <p className="text-sm text-slate-500 -mt-2 mb-3">{selectedDayLabel}</p>
+
+        {selectedItems.length > 0 && (
+          <div className="space-y-1.5 mb-3">{selectedItems.map(renderItemRow)}</div>
         )}
 
-        <div className="space-y-2 mb-4">
-          {selectedItems.map((item) => {
-            if (item.kind === "holiday") {
-              return (
-                <div key={item.key} className="bg-amber-50 text-amber-800 rounded-xl px-3 py-2 text-sm">
-                  🕎 {item.title}
-                </div>
-              );
-            }
-            if (item.kind === "event") {
-              return (
-                <div key={item.key} className="flex items-start justify-between gap-2 bg-slate-50 rounded-xl px-3 py-2">
-                  <div>
-                    <p className="font-medium text-sm">{item.title}</p>
-                    {item.notes && <p className="text-xs text-slate-500">{item.notes}</p>}
-                  </div>
-                  <button
-                    onClick={() => item.id && deleteEvent(item.id)}
-                    className="text-slate-400 hover:text-red-600 shrink-0"
-                  >
-                    <Trash2 size={16} />
-                  </button>
-                </div>
-              );
-            }
-            if (item.kind === "task") {
-              return (
-                <Link
-                  key={item.key}
-                  href="/tasks"
-                  className="flex items-center gap-2 bg-violet-50 text-violet-800 rounded-xl px-3 py-2 text-sm hover:bg-violet-100 transition-colors"
-                >
-                  <span className={clsx(item.done && "line-through opacity-60")}>✅ {item.title}</span>
-                </Link>
-              );
-            }
-            return (
-              <Link
-                key={item.key}
-                href={`/documents/${item.id}`}
-                className="flex items-center justify-between gap-2 bg-orange-50 text-orange-800 rounded-xl px-3 py-2 text-sm hover:bg-orange-100 transition-colors"
-              >
-                <span>📌 {item.title}</span>
-                <ExternalLink size={14} className="shrink-0" />
-              </Link>
-            );
-          })}
-
-          {selectedItems.length === 0 && (
-            <p className="text-sm text-slate-400">אין אירועים ביום הזה.</p>
-          )}
-        </div>
-
-        <div className="border-t border-slate-100 pt-3 space-y-2">
+        <div className="space-y-2">
           <input
             className="input"
-            placeholder="הוסף אירוע חדש ליום הזה..."
+            placeholder="הוסף אירוע חדש ליום הנבחר..."
             value={newEventTitle}
             onChange={(e) => setNewEventTitle(e.target.value)}
             onKeyDown={(e) => e.key === "Enter" && addEvent()}
@@ -364,16 +377,16 @@ export function CalendarView() {
 
       <div className="flex gap-3 text-xs text-slate-500 px-1 flex-wrap">
         <span className="flex items-center gap-1">
-          <span className="w-2.5 h-2.5 rounded bg-amber-100 border border-amber-300" /> חג/מועד
+          <span className="w-1.5 h-1.5 rounded-full bg-amber-500" /> חג/מועד
         </span>
         <span className="flex items-center gap-1">
-          <span className="w-2.5 h-2.5 rounded bg-teal-100 border border-teal-300" /> אירוע
+          <span className="w-1.5 h-1.5 rounded-full bg-teal-600" /> אירוע
         </span>
         <span className="flex items-center gap-1">
-          <span className="w-2.5 h-2.5 rounded bg-violet-100 border border-violet-300" /> משימה
+          <span className="w-1.5 h-1.5 rounded-full bg-violet-500" /> משימה
         </span>
         <span className="flex items-center gap-1">
-          <span className="w-2.5 h-2.5 rounded bg-orange-100 border border-orange-300" /> תאריך יעד למסמך
+          <span className="w-1.5 h-1.5 rounded-full bg-orange-500" /> תאריך יעד למסמך
         </span>
       </div>
     </div>
