@@ -20,6 +20,7 @@ type DashboardData = {
     uploadedAt: string;
     uploadedBy?: { name?: string } | null;
   }[];
+  projectedCount: number;
 };
 
 export default function DashboardPage() {
@@ -123,6 +124,12 @@ export default function DashboardPage() {
           </p>
         </div>
       </div>
+
+      {!!data?.projectedCount && (
+        <p className="text-xs text-slate-400 -mt-3">
+          כולל {data.projectedCount} תשלומים חודשיים קבועים שצפויים בחודש זה (טרם הופקה עבורם רשומה בפועל)
+        </p>
+      )}
 
       <div>
         <h2 className="font-semibold mb-3">פעילות בחודש זה</h2>

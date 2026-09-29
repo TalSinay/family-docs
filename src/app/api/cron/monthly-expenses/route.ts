@@ -29,7 +29,7 @@ export async function POST(req: NextRequest) {
 
     await DocumentModel.create({
       title: `תשלום חודשי - ${source.title}`,
-      category: "הוצאות",
+      category: source.category,
       subcategory: source.subcategory,
       notes: `נוצר אוטומטית מ: ${source.title}`,
       amount: source.monthlyAmount,

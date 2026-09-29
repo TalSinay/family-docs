@@ -22,10 +22,11 @@ export async function GET(req: NextRequest) {
 
   await connectToDatabase();
 
+  const monthKey = `${year}-${String(month + 1).padStart(2, "0")}`;
   const monthStart = new Date(year, month, 1);
   const monthEnd = new Date(year, month + 1, 1);
 
-  const [expensesAgg, incomeAgg, recent] = await Promise.all([
+  const [expensesAgg, incomeAgg, recent, recurringSources] = await Promise.all([
     DocumentModel.aggregate([
       { $match: { category: "הוצאות", uploadedAt: { $gte: monthStart, $lt: monthEnd } } },
       { $group: { _id: null, total: { $sum: "$amount" } } },
@@ -40,16 +41,37 @@ export async function GET(req: NextRequest) {
       .limit(20)
       .populate("uploadedBy", "name")
       .lean(),
+    // תשלומים חוזרים שמקורם לפני החודש הזה, ושה-cron החודשי עוד לא הפיק עבורם רשומה
+    // בפועל לחודש הזה (ראה .github/workflows/monthly-expenses.yml) - מוצגים כתחזית,
+    // כדי שסימון "תשלום חודשי" ישתקף בדשבורד מיידית, גם קדימה בזמן, בלי לחכות ל-1 לחודש.
+    DocumentModel.find({
+      isMonthlyPayment: true,
+      monthlyAmount: { $ne: null },
+      category: { $in: ["הוצאות", "הכנסות"] },
+      uploadedAt: { $lt: monthStart },
+      generatedForMonths: { $ne: monthKey },
+    })
+      .select("category monthlyAmount")
+      .lean(),
   ]);
 
-  const totalExpenses = expensesAgg[0]?.total || 0;
-  const totalIncome = incomeAgg[0]?.total || 0;
+  let totalExpenses = expensesAgg[0]?.total || 0;
+  let totalIncome = incomeAgg[0]?.total || 0;
+  let projectedCount = 0;
+
+  for (const source of recurringSources) {
+    if (typeof source.monthlyAmount !== "number") continue;
+    if (source.category === "הוצאות") totalExpenses += source.monthlyAmount;
+    else if (source.category === "הכנסות") totalIncome += source.monthlyAmount;
+    projectedCount++;
+  }
 
   return NextResponse.json({
-    month: `${year}-${String(month + 1).padStart(2, "0")}`,
+    month: monthKey,
     totalExpenses,
     totalIncome,
     balance: totalIncome - totalExpenses,
     recentActivity: recent,
+    projectedCount,
   });
 }
