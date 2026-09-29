@@ -16,11 +16,14 @@ export async function GET(req: NextRequest) {
   const important = searchParams.get("important");
   const sortBy = searchParams.get("sortBy") || "uploadedAt";
   const limit = Number(searchParams.get("limit") || 100);
+  const dueFrom = searchParams.get("dueFrom"); // "YYYY-MM-DD"
+  const dueTo = searchParams.get("dueTo"); // "YYYY-MM-DD"
 
   const filter: Record<string, unknown> = {};
   if (category) filter.category = category;
   if (subcategory) filter.subcategory = subcategory;
   if (important === "true") filter.isImportant = true;
+  if (dueFrom && dueTo) filter.dueDate = { $gte: dueFrom, $lte: dueTo };
 
   const docs = await DocumentModel.find(filter)
     .sort({ [sortBy]: -1 })
@@ -43,6 +46,8 @@ export async function POST(req: NextRequest) {
     notes,
     externalLink,
     customFields,
+    dueDate,
+    dueDateTitle,
     amount,
     isMonthlyPayment,
     monthlyAmount,
@@ -74,6 +79,8 @@ export async function POST(req: NextRequest) {
     notes: notes || undefined,
     externalLink: externalLink || undefined,
     customFields: customFields || [],
+    dueDate: dueDate || undefined,
+    dueDateTitle: dueDateTitle || undefined,
     amount: amount ?? undefined,
     isMonthlyPayment: !!isMonthlyPayment,
     monthlyAmount: isMonthlyPayment ? monthlyAmount : undefined,

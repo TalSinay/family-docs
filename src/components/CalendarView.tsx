@@ -1,15 +1,34 @@
 "use client";
 
 import { useEffect, useMemo, useState, useCallback } from "react";
-import { ChevronRight, ChevronLeft, Plus, Trash2 } from "lucide-react";
+import Link from "next/link";
+import { ChevronRight, ChevronLeft, Plus, Trash2, ExternalLink } from "lucide-react";
 import clsx from "clsx";
 
 import { HEBREW_MONTHS } from "@/lib/format";
 
 type Holiday = { date: string; title: string };
 type EventItem = { _id: string; title: string; date: string; notes?: string };
+type TaskItem = { _id: string; title: string; dueDate?: string; isDone: boolean };
+type DocDue = { _id: string; title: string; dueDate?: string; dueDateTitle?: string };
+
+type CalItem = {
+  key: string;
+  kind: "holiday" | "event" | "task" | "document";
+  title: string;
+  id?: string;
+  done?: boolean;
+  notes?: string;
+};
 
 const WEEKDAYS = ["א", "ב", "ג", "ד", "ה", "ו", "ש"];
+
+const KIND_STYLES: Record<CalItem["kind"], string> = {
+  holiday: "bg-amber-100 text-amber-800",
+  event: "bg-teal-100 text-teal-800",
+  task: "bg-violet-100 text-violet-800",
+  document: "bg-orange-100 text-orange-800",
+};
 
 function ymd(d: Date) {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
@@ -25,6 +44,8 @@ export function CalendarView() {
 
   const [holidays, setHolidays] = useState<Holiday[]>([]);
   const [events, setEvents] = useState<EventItem[]>([]);
+  const [tasks, setTasks] = useState<TaskItem[]>([]);
+  const [docDues, setDocDues] = useState<DocDue[]>([]);
   const [newEventTitle, setNewEventTitle] = useState("");
   const [newEventNotes, setNewEventNotes] = useState("");
 
@@ -78,18 +99,52 @@ export function CalendarView() {
     if (res.ok) setEvents(await res.json());
   }, [year, month]);
 
+  const fetchTasks = useCallback(async () => {
+    const res = await fetch("/api/tasks");
+    if (res.ok) setTasks(await res.json());
+  }, []);
+
+  const fetchDocDues = useCallback(async () => {
+    const from = ymd(new Date(year, month, 1));
+    const to = ymd(new Date(year, month + 1, 0));
+    const res = await fetch(`/api/documents?dueFrom=${from}&dueTo=${to}&limit=200`);
+    if (res.ok) setDocDues(await res.json());
+  }, [year, month]);
+
   useEffect(() => {
     if (!mounted) return;
     // eslint-disable-next-line react-hooks/set-state-in-effect -- טעינת נתונים לפי חודש, לא לולאת render
     fetchHolidays();
     fetchEvents();
-  }, [mounted, fetchHolidays, fetchEvents]);
+    fetchTasks();
+    fetchDocDues();
+  }, [mounted, fetchHolidays, fetchEvents, fetchTasks, fetchDocDues]);
 
-  function eventsForDay(dateStr: string) {
-    return events.filter((e) => e.date === dateStr);
-  }
-  function holidaysForDay(dateStr: string) {
-    return holidays.filter((h) => h.date === dateStr);
+  // כל הפריטים (חגים, אירועים, משימות עם תאריך יעד, מסמכים עם תאריך יעד) מקובצים לפי יום,
+  // כדי שיוצגו ישירות בתא של כל יום בתצוגת החודש - בלי צורך ללחוץ על היום
+  const itemsByDay = useMemo(() => {
+    const map = new Map<string, CalItem[]>();
+    const push = (date: string, item: CalItem) => {
+      if (!map.has(date)) map.set(date, []);
+      map.get(date)!.push(item);
+    };
+
+    for (const h of holidays) push(h.date, { key: `h-${h.date}-${h.title}`, kind: "holiday", title: h.title });
+    for (const e of events)
+      push(e.date, { key: `e-${e._id}`, kind: "event", title: e.title, id: e._id, notes: e.notes });
+    for (const t of tasks) {
+      if (!t.dueDate) continue;
+      push(t.dueDate, { key: `t-${t._id}`, kind: "task", title: t.title, id: t._id, done: t.isDone });
+    }
+    for (const d of docDues) {
+      if (!d.dueDate) continue;
+      push(d.dueDate, { key: `d-${d._id}`, kind: "document", title: d.dueDateTitle || d.title, id: d._id });
+    }
+    return map;
+  }, [holidays, events, tasks, docDues]);
+
+  function itemsForDay(dateStr: string): CalItem[] {
+    return itemsByDay.get(dateStr) || [];
   }
 
   async function addEvent() {
@@ -120,8 +175,7 @@ export function CalendarView() {
     );
   }, [selectedDay]);
 
-  const selectedHolidays = holidaysForDay(selectedDay);
-  const selectedEvents = eventsForDay(selectedDay);
+  const selectedItems = itemsForDay(selectedDay);
 
   if (!mounted) {
     return (
@@ -160,8 +214,9 @@ export function CalendarView() {
           {days.map((d, i) => {
             if (!d) return <div key={i} />;
             const dateStr = ymd(d);
-            const dayEvents = eventsForDay(dateStr);
-            const dayHolidays = holidaysForDay(dateStr);
+            const dayItems = itemsForDay(dateStr);
+            const visibleItems = dayItems.slice(0, 2);
+            const overflowCount = dayItems.length - visibleItems.length;
             const isToday = dateStr === todayStr;
             const isSelected = dateStr === selectedDay;
 
@@ -170,21 +225,40 @@ export function CalendarView() {
                 key={i}
                 onClick={() => setSelectedDay(dateStr)}
                 className={clsx(
-                  "aspect-square rounded-lg flex flex-col items-center justify-center text-sm relative transition-colors",
+                  "min-h-[62px] sm:min-h-[76px] rounded-lg flex flex-col items-stretch gap-0.5 p-1 text-right transition-colors overflow-hidden",
                   isSelected
                     ? "bg-teal-700 text-white"
                     : isToday
-                      ? "bg-teal-50 text-teal-800 ring-1 ring-teal-300"
+                      ? "bg-teal-50 ring-1 ring-teal-300"
                       : "hover:bg-slate-100"
                 )}
               >
-                {d.getDate()}
-                <div className="flex gap-0.5 mt-0.5">
-                  {dayHolidays.length > 0 && (
-                    <span className={clsx("w-1.5 h-1.5 rounded-full", isSelected ? "bg-white" : "bg-amber-500")} />
+                <span
+                  className={clsx(
+                    "text-xs font-medium self-end",
+                    isSelected ? "text-white" : isToday ? "text-teal-800" : "text-slate-600"
                   )}
-                  {dayEvents.length > 0 && (
-                    <span className={clsx("w-1.5 h-1.5 rounded-full", isSelected ? "bg-white" : "bg-teal-600")} />
+                >
+                  {d.getDate()}
+                </span>
+                <div className="flex-1 flex flex-col gap-0.5 min-w-0">
+                  {visibleItems.map((item) => (
+                    <span
+                      key={item.key}
+                      className={clsx(
+                        "text-[9px] leading-tight rounded px-1 py-[1px] truncate w-full",
+                        isSelected ? "bg-white/20 text-white" : KIND_STYLES[item.kind],
+                        item.kind === "task" && item.done && !isSelected && "line-through opacity-60"
+                      )}
+                      title={item.title}
+                    >
+                      {item.title}
+                    </span>
+                  ))}
+                  {overflowCount > 0 && (
+                    <span className={clsx("text-[9px] leading-tight px-1", isSelected ? "text-white/80" : "text-slate-400")}>
+                      +{overflowCount} עוד
+                    </span>
                   )}
                 </div>
               </button>
@@ -212,25 +286,54 @@ export function CalendarView() {
         )}
 
         <div className="space-y-2 mb-4">
-          {selectedHolidays.map((h) => (
-            <div key={h.title} className="bg-amber-50 text-amber-800 rounded-xl px-3 py-2 text-sm">
-              🕎 {h.title}
-            </div>
-          ))}
+          {selectedItems.map((item) => {
+            if (item.kind === "holiday") {
+              return (
+                <div key={item.key} className="bg-amber-50 text-amber-800 rounded-xl px-3 py-2 text-sm">
+                  🕎 {item.title}
+                </div>
+              );
+            }
+            if (item.kind === "event") {
+              return (
+                <div key={item.key} className="flex items-start justify-between gap-2 bg-slate-50 rounded-xl px-3 py-2">
+                  <div>
+                    <p className="font-medium text-sm">{item.title}</p>
+                    {item.notes && <p className="text-xs text-slate-500">{item.notes}</p>}
+                  </div>
+                  <button
+                    onClick={() => item.id && deleteEvent(item.id)}
+                    className="text-slate-400 hover:text-red-600 shrink-0"
+                  >
+                    <Trash2 size={16} />
+                  </button>
+                </div>
+              );
+            }
+            if (item.kind === "task") {
+              return (
+                <Link
+                  key={item.key}
+                  href="/tasks"
+                  className="flex items-center gap-2 bg-violet-50 text-violet-800 rounded-xl px-3 py-2 text-sm hover:bg-violet-100 transition-colors"
+                >
+                  <span className={clsx(item.done && "line-through opacity-60")}>✅ {item.title}</span>
+                </Link>
+              );
+            }
+            return (
+              <Link
+                key={item.key}
+                href={`/documents/${item.id}`}
+                className="flex items-center justify-between gap-2 bg-orange-50 text-orange-800 rounded-xl px-3 py-2 text-sm hover:bg-orange-100 transition-colors"
+              >
+                <span>📌 {item.title}</span>
+                <ExternalLink size={14} className="shrink-0" />
+              </Link>
+            );
+          })}
 
-          {selectedEvents.map((e) => (
-            <div key={e._id} className="flex items-start justify-between gap-2 bg-slate-50 rounded-xl px-3 py-2">
-              <div>
-                <p className="font-medium text-sm">{e.title}</p>
-                {e.notes && <p className="text-xs text-slate-500">{e.notes}</p>}
-              </div>
-              <button onClick={() => deleteEvent(e._id)} className="text-slate-400 hover:text-red-600 shrink-0">
-                <Trash2 size={16} />
-              </button>
-            </div>
-          ))}
-
-          {selectedHolidays.length === 0 && selectedEvents.length === 0 && (
+          {selectedItems.length === 0 && (
             <p className="text-sm text-slate-400">אין אירועים ביום הזה.</p>
           )}
         </div>
@@ -259,12 +362,18 @@ export function CalendarView() {
         </div>
       </div>
 
-      <div className="flex gap-4 text-xs text-slate-500 px-1">
+      <div className="flex gap-3 text-xs text-slate-500 px-1 flex-wrap">
         <span className="flex items-center gap-1">
-          <span className="w-1.5 h-1.5 rounded-full bg-amber-500" /> חג/מועד
+          <span className="w-2.5 h-2.5 rounded bg-amber-100 border border-amber-300" /> חג/מועד
         </span>
         <span className="flex items-center gap-1">
-          <span className="w-1.5 h-1.5 rounded-full bg-teal-600" /> אירוע
+          <span className="w-2.5 h-2.5 rounded bg-teal-100 border border-teal-300" /> אירוע
+        </span>
+        <span className="flex items-center gap-1">
+          <span className="w-2.5 h-2.5 rounded bg-violet-100 border border-violet-300" /> משימה
+        </span>
+        <span className="flex items-center gap-1">
+          <span className="w-2.5 h-2.5 rounded bg-orange-100 border border-orange-300" /> תאריך יעד למסמך
         </span>
       </div>
     </div>

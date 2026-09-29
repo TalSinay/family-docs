@@ -28,6 +28,8 @@ type DocData = {
   amount?: number;
   isMonthlyPayment?: boolean;
   monthlyAmount?: number;
+  dueDate?: string;
+  dueDateTitle?: string;
   fileId?: string;
   fileName?: string;
   fileMimeType?: string;
@@ -45,6 +47,8 @@ export function DocumentDetail({ doc: initialDoc }: { doc: DocData }) {
   const [monthlyAmount, setMonthlyAmount] = useState(
     initialDoc.monthlyAmount != null ? String(initialDoc.monthlyAmount) : ""
   );
+  const [dueDate, setDueDate] = useState(initialDoc.dueDate || "");
+  const [dueDateTitle, setDueDateTitle] = useState(initialDoc.dueDateTitle || "");
   const [saving, setSaving] = useState(false);
   const [savedMsg, setSavedMsg] = useState("");
 
@@ -77,6 +81,8 @@ export function DocumentDetail({ doc: initialDoc }: { doc: DocData }) {
       customFields: customFields.filter((cf) => cf.key.trim()),
       isMonthlyPayment,
       monthlyAmount: isMonthlyPayment && monthlyAmount ? Number(monthlyAmount) : undefined,
+      dueDate: dueDate || "",
+      dueDateTitle: dueDate ? dueDateTitle || undefined : undefined,
     });
     setSaving(false);
     setSavedMsg(ok ? "נשמר" : "שגיאה בשמירה");
@@ -168,6 +174,24 @@ export function DocumentDetail({ doc: initialDoc }: { doc: DocData }) {
             </a>
           )}
         </div>
+      </div>
+
+      <div className="card p-5">
+        <label className="label">תאריך יעד (מופיע ביומן)</label>
+        <input
+          type="date"
+          className="input"
+          value={dueDate}
+          onChange={(e) => setDueDate(e.target.value)}
+        />
+        {dueDate && (
+          <input
+            className="input mt-2"
+            placeholder="כותרת שתוצג ביומן (לדוגמה: לחדש ביטוח רכב)"
+            value={dueDateTitle}
+            onChange={(e) => setDueDateTitle(e.target.value)}
+          />
+        )}
       </div>
 
       {isFinancial && (

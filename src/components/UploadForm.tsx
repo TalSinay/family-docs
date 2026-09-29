@@ -25,6 +25,8 @@ export function UploadForm({
   const [amount, setAmount] = useState("");
   const [isMonthlyPayment, setIsMonthlyPayment] = useState(false);
   const [monthlyAmount, setMonthlyAmount] = useState("");
+  const [dueDate, setDueDate] = useState("");
+  const [dueDateTitle, setDueDateTitle] = useState("");
   const [customFields, setCustomFields] = useState<CustomField[]>([]);
   const [file, setFile] = useState<File | null>(null);
   const [submitting, setSubmitting] = useState(false);
@@ -86,6 +88,8 @@ export function UploadForm({
           notes: notes || undefined,
           externalLink: externalLink || undefined,
           customFields: customFields.filter((cf) => cf.key.trim()),
+          dueDate: dueDate || undefined,
+          dueDateTitle: dueDate ? dueDateTitle || undefined : undefined,
           amount: amount ? Number(amount) : undefined,
           isMonthlyPayment,
           monthlyAmount: isMonthlyPayment && monthlyAmount ? Number(monthlyAmount) : undefined,
@@ -219,6 +223,24 @@ export function UploadForm({
           value={externalLink}
           onChange={(e) => setExternalLink(e.target.value)}
         />
+      </div>
+
+      <div>
+        <label className="label">תאריך יעד (אופציונלי - יופיע ביומן)</label>
+        <input
+          type="date"
+          className="input"
+          value={dueDate}
+          onChange={(e) => setDueDate(e.target.value)}
+        />
+        {dueDate && (
+          <input
+            className="input mt-2"
+            placeholder="כותרת שתוצג ביומן (לדוגמה: לחדש ביטוח רכב)"
+            value={dueDateTitle}
+            onChange={(e) => setDueDateTitle(e.target.value)}
+          />
+        )}
       </div>
 
       <div>

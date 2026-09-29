@@ -19,6 +19,10 @@ export interface IDocument {
   isImportant: boolean;
   customFields: ICustomField[];
 
+  // תאריך יעד אופציונלי (לדוגמה: מועד חידוש ביטוח) - כשמוגדר, מופיע ביומן בתאריך הזה
+  dueDate?: string; // "YYYY-MM-DD"
+  dueDateTitle?: string; // הכותרת שתוצג ביומן; אם ריק, מוצגת כותרת המסמך עצמו
+
   amount?: number;
   isMonthlyPayment: boolean;
   monthlyAmount?: number;
@@ -50,6 +54,9 @@ const DocumentSchema = new Schema<IDocument>({
   isImportant: { type: Boolean, default: false },
   customFields: { type: [CustomFieldSchema], default: [] },
 
+  dueDate: { type: String },
+  dueDateTitle: { type: String },
+
   amount: { type: Number },
   isMonthlyPayment: { type: Boolean, default: false },
   monthlyAmount: { type: Number },
@@ -70,5 +77,6 @@ DocumentSchema.index({ category: 1, subcategory: 1 });
 DocumentSchema.index({ isImportant: 1 });
 DocumentSchema.index({ lastOpenedAt: -1 });
 DocumentSchema.index({ uploadedAt: -1 });
+DocumentSchema.index({ dueDate: 1 });
 
 export default models.Document || model<IDocument>("Document", DocumentSchema);

@@ -44,11 +44,15 @@ export async function PATCH(
     "isMonthlyPayment",
     "monthlyAmount",
     "subcategory",
+    "dueDate",
+    "dueDateTitle",
   ];
   const update: Record<string, unknown> = {};
   for (const key of allowedFields) {
     if (key in body) update[key] = body[key];
   }
+  // "" נשלח כדי לנקות תאריך יעד קיים
+  if (update.dueDate === "") update.dueDate = null;
 
   await connectToDatabase();
   const doc = await DocumentModel.findByIdAndUpdate(id, update, { new: true });
