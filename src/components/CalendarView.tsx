@@ -210,12 +210,12 @@ export function CalendarView() {
           ))}
         </div>
 
-        <div className="grid grid-cols-7 gap-1">
+        <div className="grid grid-cols-7 gap-1.5">
           {days.map((d, i) => {
             if (!d) return <div key={i} />;
             const dateStr = ymd(d);
             const dayItems = itemsForDay(dateStr);
-            const visibleItems = dayItems.slice(0, 2);
+            const visibleItems = dayItems.slice(0, 3);
             const overflowCount = dayItems.length - visibleItems.length;
             const isToday = dateStr === todayStr;
             const isSelected = dateStr === selectedDay;
@@ -225,7 +225,7 @@ export function CalendarView() {
                 key={i}
                 onClick={() => setSelectedDay(dateStr)}
                 className={clsx(
-                  "min-h-[62px] sm:min-h-[76px] rounded-lg flex flex-col items-stretch gap-0.5 p-1 text-right transition-colors overflow-hidden",
+                  "min-h-[86px] sm:min-h-[108px] rounded-lg flex flex-col items-stretch gap-1 p-1.5 text-right transition-colors overflow-hidden",
                   isSelected
                     ? "bg-teal-700 text-white"
                     : isToday
@@ -235,18 +235,18 @@ export function CalendarView() {
               >
                 <span
                   className={clsx(
-                    "text-xs font-medium self-end",
+                    "text-sm font-medium self-end",
                     isSelected ? "text-white" : isToday ? "text-teal-800" : "text-slate-600"
                   )}
                 >
                   {d.getDate()}
                 </span>
-                <div className="flex-1 flex flex-col gap-0.5 min-w-0">
+                <div className="flex-1 flex flex-col gap-1 min-w-0">
                   {visibleItems.map((item) => (
                     <span
                       key={item.key}
                       className={clsx(
-                        "text-[9px] leading-tight rounded px-1 py-[1px] truncate w-full",
+                        "text-[10.5px] leading-tight rounded px-1 py-[2px] truncate w-full",
                         isSelected ? "bg-white/20 text-white" : KIND_STYLES[item.kind],
                         item.kind === "task" && item.done && !isSelected && "line-through opacity-60"
                       )}
@@ -256,7 +256,7 @@ export function CalendarView() {
                     </span>
                   ))}
                   {overflowCount > 0 && (
-                    <span className={clsx("text-[9px] leading-tight px-1", isSelected ? "text-white/80" : "text-slate-400")}>
+                    <span className={clsx("text-[10px] leading-tight px-1", isSelected ? "text-white/80" : "text-slate-400")}>
                       +{overflowCount} עוד
                     </span>
                   )}

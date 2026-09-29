@@ -40,7 +40,9 @@ body {
 }
 
 .input {
-  @apply w-full rounded-xl border border-slate-300 px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-teal-600 focus:border-transparent bg-white;
+  /* text-base (16px) ולא text-sm בכוונה: מתחת ל-16px, ספארי באייפון מגדיל זום
+     אוטומטית בפוקוס על שדה טקסט, מה שמוציא את הדף מתצוגת ה-PWA הרספונסיבית */
+  @apply w-full rounded-xl border border-slate-300 px-3 py-2.5 text-base focus:outline-none focus:ring-2 focus:ring-teal-600 focus:border-transparent bg-white;
 }
 
 .label {
