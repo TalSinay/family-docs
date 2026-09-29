@@ -2,16 +2,42 @@
 // מריץ שני חיבורים נפרדים ל-Mongo (מדמה את "הרשמה" ואז "התחברות") כדי לבודד
 // אם הכשל הוא ברשת/ב-Atlas, או ספציפי לאופן שבו Next.js/mongoose מנהלים חיבורים.
 //
-// הרצה: MONGODB_URI="..." node scripts/test-mongo.js
-// (או: ודא ש-.env.local קיים ותריץ: node -r dotenv/config scripts/test-mongo.js dotenv_config_path=.env.local)
+// הרצה (טוען אוטומטית את MONGODB_URI מתוך .env.local, אין צורך להעתיק אותו לשורת הפקודה):
+//   node scripts/test-mongo.js
 
+const fs = require("fs");
+const path = require("path");
 const mongoose = require("mongoose");
+
+function loadEnvLocal() {
+  const envPath = path.join(__dirname, "..", ".env.local");
+  if (!fs.existsSync(envPath)) return;
+  const content = fs.readFileSync(envPath, "utf-8");
+  for (const line of content.split("\n")) {
+    const trimmed = line.trim();
+    if (!trimmed || trimmed.startsWith("#")) continue;
+    const eqIndex = trimmed.indexOf("=");
+    if (eqIndex === -1) continue;
+    const key = trimmed.slice(0, eqIndex).trim();
+    let value = trimmed.slice(eqIndex + 1).trim();
+    if (
+      (value.startsWith('"') && value.endsWith('"')) ||
+      (value.startsWith("'") && value.endsWith("'"))
+    ) {
+      value = value.slice(1, -1);
+    }
+    if (!process.env[key]) process.env[key] = value;
+  }
+}
+
+loadEnvLocal();
 
 const uri = process.env.MONGODB_URI;
 if (!uri) {
-  console.error("חסר MONGODB_URI. הרץ עם: MONGODB_URI=\"...\" node scripts/test-mongo.js");
+  console.error("חסר MONGODB_URI. ודא ש-.env.local קיים בתיקיית השורש של הפרויקט ומכיל אותו.");
   process.exit(1);
 }
+console.log("נטען MONGODB_URI (מוסתר):", uri.replace(/:[^:@]+@/, ":****@"));
 
 async function attempt(label) {
   console.log(`\n--- ניסיון: ${label} ---`);
