@@ -1,7 +1,8 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
-import { ChevronRight, ChevronLeft, TrendingDown, TrendingUp, Scale } from "lucide-react";
+import Link from "next/link";
+import { ChevronRight, ChevronLeft, TrendingDown, TrendingUp, Scale, BarChart3 } from "lucide-react";
 import { DocumentCard } from "@/components/DocumentCard";
 import { formatCurrency, HEBREW_MONTHS } from "@/lib/format";
 
@@ -92,11 +93,18 @@ export default function DashboardPage() {
         </div>
       </div>
 
-      {!isCurrentMonth && (
-        <button onClick={() => setCursor(new Date())} className="text-xs text-teal-700 font-medium">
-          חזרה לחודש הנוכחי
-        </button>
-      )}
+      <div className="flex items-center justify-between">
+        {!isCurrentMonth ? (
+          <button onClick={() => setCursor(new Date())} className="text-xs text-teal-700 font-medium">
+            חזרה לחודש הנוכחי
+          </button>
+        ) : (
+          <span />
+        )}
+        <Link href="/reports" className="flex items-center gap-1 text-xs text-teal-700 font-medium">
+          <BarChart3 size={14} /> דוחות שנתיים וטווח מותאם
+        </Link>
+      </div>
 
       <div className="grid grid-cols-3 gap-3">
         <div className="card p-4">
