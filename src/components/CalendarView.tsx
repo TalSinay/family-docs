@@ -23,11 +23,12 @@ type CalItem = {
 
 const WEEKDAYS = ["א", "ב", "ג", "ד", "ה", "ו", "ש"];
 
-const KIND_DOT: Record<CalItem["kind"], string> = {
-  holiday: "bg-amber-500",
-  event: "bg-teal-600",
-  task: "bg-violet-500",
-  document: "bg-orange-500",
+// צבעים מלאים + טקסט לבן (כמו הצ'יפים בגוגל קלנדר) - קריא גם ברוחב תא מאוד צר
+const KIND_CHIP: Record<CalItem["kind"], string> = {
+  holiday: "bg-amber-500 text-white",
+  event: "bg-teal-600 text-white",
+  task: "bg-violet-600 text-white",
+  document: "bg-orange-500 text-white",
 };
 
 const KIND_ROW_STYLES: Record<CalItem["kind"], string> = {
@@ -135,7 +136,8 @@ export function CalendarView() {
     fetchDocDues();
   }, [mounted, fetchHolidays, fetchEvents, fetchTasks, fetchDocDues]);
 
-  // כל הפריטים (חגים, אירועים, משימות עם תאריך יעד, מסמכים עם תאריך יעד) מקובצים לפי יום
+  // כל הפריטים (חגים, אירועים, משימות עם תאריך יעד, מסמכים עם תאריך יעד) מקובצים לפי יום,
+  // כדי שיוצגו ישירות בתא של כל יום בתצוגת החודש - בלי צורך ללחוץ על היום
   const itemsByDay = useMemo(() => {
     const map = new Map<string, CalItem[]>();
     const push = (date: string, item: CalItem) => {
@@ -160,16 +162,6 @@ export function CalendarView() {
   function itemsForDay(dateStr: string): CalItem[] {
     return itemsByDay.get(dateStr) || [];
   }
-
-  // כל התאריכים בחודש המוצג שיש בהם משהו, לפי סדר כרונולוגי - לרשימת "כל החודש" למטה,
-  // שמוצגת תמיד ואינה תלויה בבחירת יום ספציפי
-  const monthDatesWithItems = useMemo(() => {
-    return days
-      .filter((d): d is Date => !!d)
-      .map((d) => ymd(d))
-      .filter((dateStr) => itemsForDay(dateStr).length > 0);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [days, itemsByDay]);
 
   async function addEvent() {
     if (!newEventTitle.trim()) return;
@@ -250,8 +242,8 @@ export function CalendarView() {
 
   return (
     <div className="space-y-4">
-      <div className="card p-4">
-        <div className="flex items-center justify-between mb-3">
+      <div className="card p-2.5 sm:p-4">
+        <div className="flex items-center justify-between mb-3 px-1.5">
           <button
             onClick={() => setCursor(new Date(year, month - 1, 1))}
             className="p-1.5 rounded-full hover:bg-slate-100"
@@ -269,19 +261,21 @@ export function CalendarView() {
           </button>
         </div>
 
-        <div className="grid grid-cols-7 text-center text-xs text-slate-400 mb-1">
+        <div className="grid grid-cols-7 text-center text-[11px] text-slate-400 mb-1">
           {WEEKDAYS.map((w) => (
             <div key={w}>{w}</div>
           ))}
         </div>
 
-        <div className="grid grid-cols-7 gap-1">
+        {/* רשת החודש: כל תא מציג ישירות את כותרות הפריטים שלו (כמו גוגל קלנדר) -
+            בלי צורך ללחוץ על היום. השורה גדלה אוטומטית כשיש בה יום עמוס יותר. */}
+        <div className="grid grid-cols-7 gap-[3px]">
           {days.map((d, i) => {
             if (!d) return <div key={i} />;
             const dateStr = ymd(d);
             const dayItems = itemsForDay(dateStr);
-            // עד 4 נקודות, אחת לכל סוג נוכח באותו יום (לא אחת לכל פריט, כדי שלא יתפוצץ ביום עמוס)
-            const kinds = Array.from(new Set(dayItems.map((it) => it.kind)));
+            const visibleItems = dayItems.slice(0, 4);
+            const overflowCount = dayItems.length - visibleItems.length;
             const isToday = dateStr === todayStr;
             const isSelected = dateStr === selectedDay;
 
@@ -290,71 +284,67 @@ export function CalendarView() {
                 key={i}
                 onClick={() => setSelectedDay(dateStr)}
                 className={clsx(
-                  "aspect-square rounded-lg flex flex-col items-center justify-center text-sm relative transition-colors",
-                  isSelected
-                    ? "bg-teal-700 text-white"
-                    : isToday
-                      ? "bg-teal-50 text-teal-800 ring-1 ring-teal-300"
-                      : "hover:bg-slate-100"
+                  "min-h-[48px] rounded-md flex flex-col items-stretch gap-[2px] p-[3px] text-right transition-colors",
+                  isSelected ? "ring-2 ring-teal-600 bg-teal-50" : "hover:bg-slate-50"
                 )}
               >
-                {d.getDate()}
-                <div className="flex gap-0.5 mt-0.5">
-                  {kinds.map((k) => (
-                    <span
-                      key={k}
-                      className={clsx("w-1.5 h-1.5 rounded-full", isSelected ? "bg-white" : KIND_DOT[k])}
-                    />
-                  ))}
-                </div>
+                <span
+                  className={clsx(
+                    "text-[11px] leading-none self-end w-4 h-4 flex items-center justify-center rounded-full shrink-0",
+                    isToday ? "bg-teal-700 text-white font-semibold" : "text-slate-500"
+                  )}
+                >
+                  {d.getDate()}
+                </span>
+                {visibleItems.map((item) => (
+                  <span
+                    key={item.key}
+                    dir="auto"
+                    className={clsx(
+                      "text-[9.5px] sm:text-[10.5px] leading-tight rounded-[3px] px-1 py-[1.5px] truncate w-full",
+                      KIND_CHIP[item.kind],
+                      item.kind === "task" && item.done && "opacity-50 line-through"
+                    )}
+                  >
+                    {item.title}
+                  </span>
+                ))}
+                {overflowCount > 0 && (
+                  <span className="text-[9px] leading-tight px-1 text-slate-400">+{overflowCount} עוד</span>
+                )}
               </button>
             );
           })}
         </div>
       </div>
 
-      {/* רשימת כל החודש - מוצגת תמיד, בלי צורך לבחור יום ספציפי */}
-      <div className="card p-5">
-        <h2 className="font-bold mb-3">מה קורה החודש</h2>
-        <div className="space-y-4 max-h-[420px] overflow-y-auto">
-          {monthDatesWithItems.length === 0 && (
-            <p className="text-sm text-slate-400 text-center py-6">אין אירועים או משימות החודש.</p>
-          )}
-          {monthDatesWithItems.map((dateStr) => (
-            <div key={dateStr}>
-              <div className="flex items-center gap-2 mb-1.5">
-                <p className="text-xs font-semibold text-slate-500">{formatDayHeader(dateStr)}</p>
-                {dateStr === todayStr && (
-                  <span className="text-[10px] text-teal-700 bg-teal-50 rounded-full px-2 py-0.5">היום</span>
-                )}
-              </div>
-              <div className="space-y-1.5">{itemsForDay(dateStr).map(renderItemRow)}</div>
-            </div>
-          ))}
-        </div>
-      </div>
-
-      {/* הוספת אירוע ליום נבחר */}
+      {/* פירוט מלא של היום שנבחר - כותרות מלאות ללא קיצוץ, והוספת אירוע */}
       <div className="card p-5">
         <div className="flex items-center justify-between mb-3">
           <h2 className="font-bold">
-            {selectedDay === todayStr ? "הוסף אירוע להיום" : `הוסף אירוע ל-${selectedDayLabel}`}
+            {selectedDay === todayStr ? "היום" : selectedDayLabel}
           </h2>
-          {selectedDay !== todayStr && (
+          {selectedDay === todayStr ? (
+            <span className="text-xs text-teal-700 bg-teal-50 rounded-full px-2.5 py-1">עכשיו</span>
+          ) : (
             <button onClick={() => setSelectedDay(todayStr)} className="text-xs text-teal-700 font-medium">
               חזרה להיום
             </button>
           )}
         </div>
-
-        {selectedItems.length > 0 && (
-          <div className="space-y-1.5 mb-3">{selectedItems.map(renderItemRow)}</div>
+        {selectedDay !== todayStr && (
+          <p className="text-sm text-slate-500 -mt-2 mb-3">{selectedDayLabel}</p>
         )}
 
-        <div className="space-y-2">
+        <div className="space-y-2 mb-4">
+          {selectedItems.map(renderItemRow)}
+          {selectedItems.length === 0 && <p className="text-sm text-slate-400">אין אירועים ביום הזה.</p>}
+        </div>
+
+        <div className="border-t border-slate-100 pt-3 space-y-2">
           <input
             className="input"
-            placeholder="הוסף אירוע חדש ליום הנבחר..."
+            placeholder="הוסף אירוע חדש ליום הזה..."
             value={newEventTitle}
             onChange={(e) => setNewEventTitle(e.target.value)}
             onKeyDown={(e) => e.key === "Enter" && addEvent()}
@@ -377,16 +367,16 @@ export function CalendarView() {
 
       <div className="flex gap-3 text-xs text-slate-500 px-1 flex-wrap">
         <span className="flex items-center gap-1">
-          <span className="w-1.5 h-1.5 rounded-full bg-amber-500" /> חג/מועד
+          <span className="w-2.5 h-2.5 rounded-[3px] bg-amber-500" /> חג/מועד
         </span>
         <span className="flex items-center gap-1">
-          <span className="w-1.5 h-1.5 rounded-full bg-teal-600" /> אירוע
+          <span className="w-2.5 h-2.5 rounded-[3px] bg-teal-600" /> אירוע
         </span>
         <span className="flex items-center gap-1">
-          <span className="w-1.5 h-1.5 rounded-full bg-violet-500" /> משימה
+          <span className="w-2.5 h-2.5 rounded-[3px] bg-violet-600" /> משימה
         </span>
         <span className="flex items-center gap-1">
-          <span className="w-1.5 h-1.5 rounded-full bg-orange-500" /> תאריך יעד למסמך
+          <span className="w-2.5 h-2.5 rounded-[3px] bg-orange-500" /> תאריך יעד למסמך
         </span>
       </div>
     </div>
