@@ -1,15 +1,15 @@
 import { NextResponse } from "next/server";
-import { auth } from "@/lib/auth";
+import { requireWorkspace } from "@/lib/requireWorkspace";
 import { connectToDatabase } from "@/lib/mongodb";
 import SubCategory from "@/lib/models/SubCategory";
 import { DEFAULT_SUBCATEGORIES, MAIN_CATEGORIES, MainCategory } from "@/lib/categories";
 
 export async function GET() {
-  const session = await auth();
-  if (!session?.user) return NextResponse.json({ error: "לא מחובר" }, { status: 401 });
+  const { workspaceId, error } = await requireWorkspace();
+  if (error) return error;
 
   await connectToDatabase();
-  const custom = await SubCategory.find().lean();
+  const custom = await SubCategory.find({ workspaceId }).lean();
 
   const result: Record<MainCategory, string[]> = {} as Record<MainCategory, string[]>;
   for (const cat of MAIN_CATEGORIES) {

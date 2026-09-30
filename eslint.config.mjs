@@ -12,6 +12,8 @@ const eslintConfig = defineConfig([
     "out/**",
     "build/**",
     "next-env.d.ts",
+    // סקריפטי Node.js עצמאיים (אבחון/הגירה חד-פעמית) - לא חלק מקוד האפליקציה שנבנה ע"י Next.js
+    "scripts/**",
   ]),
 ]);
 

@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { auth } from "@/lib/auth";
+import { requireWorkspace } from "@/lib/requireWorkspace";
 import { connectToDatabase } from "@/lib/mongodb";
 import DocumentModel from "@/lib/models/Document";
 
@@ -11,8 +11,8 @@ function monthKey(y: number, m: number) {
 // מחזיר סיכום הכנסות/הוצאות לפי חודש עבור טווח נתון (from/to בפורמט YYYY-MM, כולל שני הקצוות).
 // משמש גם ל"סיכום שנתי" (טווח = ינואר-דצמבר של שנה) וגם לטווח חודשים מותאם אישית.
 export async function GET(req: NextRequest) {
-  const session = await auth();
-  if (!session?.user) return NextResponse.json({ error: "לא מחובר" }, { status: 401 });
+  const { workspaceId, error } = await requireWorkspace();
+  if (error) return error;
 
   const { searchParams } = new URL(req.url);
   const fromParam = searchParams.get("from");
@@ -50,6 +50,7 @@ export async function GET(req: NextRequest) {
 
   const [docs, recurringSources] = await Promise.all([
     DocumentModel.find({
+      workspaceId,
       category: { $in: ["הוצאות", "הכנסות"] },
       uploadedAt: { $gte: rangeStart, $lt: rangeEnd },
     })
@@ -58,6 +59,7 @@ export async function GET(req: NextRequest) {
     // תשלומים חוזרים שנוצרו לפני סוף הטווח - כדי לחשב תחזית לחודשים שטרם הופקה
     // עבורם רשומה בפועל (אותו היגיון כמו בדשבורד החודשי)
     DocumentModel.find({
+      workspaceId,
       isMonthlyPayment: true,
       monthlyAmount: { $ne: null },
       category: { $in: ["הוצאות", "הכנסות"] },

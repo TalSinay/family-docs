@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { auth } from "@/lib/auth";
+import { requireWorkspace } from "@/lib/requireWorkspace";
 import { connectToDatabase } from "@/lib/mongodb";
 import FileModel from "@/lib/models/File";
 
@@ -7,10 +7,8 @@ import FileModel from "@/lib/models/File";
 const MAX_FILE_SIZE = 11 * 1024 * 1024; // 11MB
 
 export async function POST(req: NextRequest) {
-  const session = await auth();
-  if (!session?.user) {
-    return NextResponse.json({ error: "לא מחובר" }, { status: 401 });
-  }
+  const { error } = await requireWorkspace();
+  if (error) return error;
 
   const formData = await req.formData();
   const file = formData.get("file") as File | null;

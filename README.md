@@ -37,18 +37,28 @@ cp .env.example .env.local
 - `MONGODB_URI` - ה-connection string מ-Atlas (הוסף בסופו שם database, לדוגמה `/familydocs`)
 - `AUTH_SECRET` - הרץ `openssl rand -base64 32` והדבק את הפלט
 - `CRON_SECRET` - מחרוזת אקראית נוספת (לדוגמה גם עם `openssl rand -base64 32`)
+- `RESEND_API_KEY` - מפתח API מ-[resend.com](https://resend.com) (טיר חינמי מספיק), לשליחת קוד האימות הדו-שלבי לאזור הניהול
+- `ADMIN_OTP_FROM_EMAIL` - כתובת שולח מאומתת ב-Resend (לדוגמה `אזור ניהול <onboarding@resend.dev>` לבדיקות, או דומיין משלך לאחר אימות)
 
 ```bash
 npm run dev
 ```
 
-פתח [http://localhost:3000](http://localhost:3000), לחץ "הרשמה" וצור את המשתמש הראשון שלך (עד 10 משתמשים בסה"כ).
+**אין הרשמה עצמית.** יצירת משתמשים והקצאתם ל-workspace-ים נעשית אך ורק דרך אזור הניהול (`/admin/login`). כדי ליצור את משתמש ה-admin הראשון ולבצע הגירה חד-פעמית של נתונים קיימים ל-workspace הראשון:
+
+```bash
+node scripts/migrate-to-workspaces.js --admin-email=you@example.com
+```
+
+הסקריפט יוצר workspace ראשון בשם "המשפחה" (ניתן לשינוי עם `--name="שם אחר"`), משייך אליו את כל המשתמשים הקיימים, מתייג את כל המסמכים/האירועים/המשימות הקיימים אליו, ומסמן את המשתמש עם האימייל שסופק כ-admin. בטוח להרצה כמה פעמים. אם עדיין אין משתמשים כלל, ניתן ליצור משתמש ראשון ישירות מ-MongoDB Atlas (Collections → `users`) או דרך `mongosh`, ואז להריץ את הסקריפט כדי לסמן אותו כ-admin וליצור עבורו workspace.
+
+לאחר מכן היכנס לאזור הניהול ב-`/admin/login` עם האימייל/סיסמה של אותו משתמש (יישלח קוד אימות למייל), וצור/שייך משתמשים ו-workspace-ים נוספים.
 
 ### 3. פריסה ל-Vercel (חינם)
 
 1. הרשם ב-[vercel.com](https://vercel.com) עם GitHub.
 2. "Add New Project" → בחר את ה-repo הזה.
-3. תחת Environment Variables הוסף את שלושת המשתנים מ-`.env.local` (עם ה-URI האמיתי, לא placeholder).
+3. תחת Environment Variables הוסף את חמשת המשתנים מ-`.env.local` (עם ה-URI האמיתי, לא placeholder).
 4. Deploy.
 
 בסיום תקבל כתובת כמו `https://family-docs-yourname.vercel.app`.
@@ -75,7 +85,7 @@ npm run dev
 
 - **גודל קובץ מקסימלי: כ-11MB** (מגבלת מסמך MongoDB). מתאים למרבית הסריקות/PDF-ים/תמונות, לא לסרטונים או קבצים כבדים.
 - הטיר החינמי של MongoDB Atlas מוגבל ל-512MB אחסון כולל - מספיק בנוחות לשימוש משפחתי (עד 10 משתמשים) לאורך זמן רב.
-- אין הרשאות גרנולריות בין משתמשים - כל מי שמחובר לאפליקציה רואה את כל המסמכים (מתאים לשימוש משפחתי פנימי).
+- הרשאות הן פר-workspace בלבד (גישה מלאה לכל workspace שהמשתמש שויך אליו, ללא הבחנה בין צפייה לעריכה בתוך אותו workspace).
 
 ## מבנה הפרויקט
 
@@ -84,9 +94,19 @@ src/
   app/                 עמודים (App Router) + API routes
   components/          רכיבי React (טופס העלאה, לוח שנה, כרטיסי מסמך...)
   lib/
-    models/            סכמות Mongoose (Document, File, User, CalendarEvent, SubCategory)
+    models/            סכמות Mongoose (Document, File, User, CalendarEvent, Task, SubCategory, Workspace, WorkspaceMembership)
     categories.ts       הגדרת הקטגוריות ותתי-הקטגוריות
-    auth.ts             הגדרת Auth.js
+    auth.ts             הגדרת Auth.js (כניסה רגילה + כניסת admin עם 2FA)
     mongodb.ts           חיבור למסד הנתונים
+    resend.ts            שליחת קוד אימות (2FA) למייל האדמין
+scripts/
+  migrate-to-workspaces.js   הגירה חד-פעמית למבנה multi-tenant + יצירת admin ראשון
 .github/workflows/     אוטומציית ה-cron החודשי
 ```
+
+## אזור ניהול (admin)
+
+- כניסה ב-`/admin/login`, בשני שלבים: אימייל+סיסמה → קוד בן 6 ספרות שנשלח למייל (בתוקף ל-10 דקות) → כניסה.
+- רק משתמש עם `role: "admin"` יכול להיכנס; ההגדרה נעשית ע"י סקריפט ההגירה או ישירות במסד הנתונים.
+- מאזור הניהול ניתן ליצור workspace-ים, ליצור משתמשים חדשים (אין הרשמה עצמית), לשייך משתמשים ל-workspace-ים ולהגדיר לכל משתמש שם תצוגה מותאם בכל workspace (למשל "טל" יוצג כ"דן" ב-workspace מסוים).
+- משתמש רגיל רואה ויכול לערוך מידע רק ב-workspace-ים שהוא שויך אליהם; אם הוא משויך ליותר מאחד, מוצג בורר workspace בכותרת העליונה.

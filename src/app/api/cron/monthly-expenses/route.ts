@@ -28,6 +28,7 @@ export async function POST(req: NextRequest) {
     if (!source.monthlyAmount) continue;
 
     await DocumentModel.create({
+      workspaceId: source.workspaceId,
       title: `תשלום חודשי - ${source.title}`,
       category: source.category,
       subcategory: source.subcategory,

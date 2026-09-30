@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import mongoose from "mongoose";
-import { auth } from "@/lib/auth";
+import { requireWorkspace } from "@/lib/requireWorkspace";
 import { connectToDatabase } from "@/lib/mongodb";
 import FileModel from "@/lib/models/File";
 import DocumentModel from "@/lib/models/Document";
@@ -9,10 +9,8 @@ export async function GET(
   req: NextRequest,
   { params }: { params: Promise<{ fileId: string }> }
 ) {
-  const session = await auth();
-  if (!session?.user) {
-    return NextResponse.json({ error: "לא מחובר" }, { status: 401 });
-  }
+  const { workspaceId, error } = await requireWorkspace();
+  if (error) return error;
 
   const { fileId } = await params;
   if (!mongoose.isValidObjectId(fileId)) {
@@ -21,9 +19,9 @@ export async function GET(
 
   await connectToDatabase();
 
-  // שלב האימות: קובץ מוגש רק אם יש רשומת Document שמצביעה עליו.
-  // כך אי אפשר "לנחש" מזהה ולהוריד קובץ שלא משויך לשום דבר באפליקציה.
-  const linkedDoc = await DocumentModel.findOne({ fileId }).select("_id").lean();
+  // שלב האימות: קובץ מוגש רק אם יש רשומת Document שמצביעה עליו, וששייכת
+  // ל-workspace הפעיל של המשתמש - כך אי אפשר לגשת לקובץ ששייך ל-workspace אחר.
+  const linkedDoc = await DocumentModel.findOne({ fileId, workspaceId }).select("_id").lean();
   if (!linkedDoc) {
     return NextResponse.json({ error: "הקובץ לא נמצא" }, { status: 404 });
   }

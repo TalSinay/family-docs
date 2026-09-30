@@ -1,12 +1,13 @@
 import { NextRequest, NextResponse } from "next/server";
-import { auth } from "@/lib/auth";
+import { requireWorkspace } from "@/lib/requireWorkspace";
 import { connectToDatabase } from "@/lib/mongodb";
 import DocumentModel from "@/lib/models/Document";
 import SubCategory from "@/lib/models/SubCategory";
+import { overlayUploaderDisplayNames } from "@/lib/resolveDisplayNames";
 
 export async function GET(req: NextRequest) {
-  const session = await auth();
-  if (!session?.user) return NextResponse.json({ error: "לא מחובר" }, { status: 401 });
+  const { workspaceId, error } = await requireWorkspace();
+  if (error) return error;
 
   await connectToDatabase();
 
@@ -19,7 +20,7 @@ export async function GET(req: NextRequest) {
   const dueFrom = searchParams.get("dueFrom"); // "YYYY-MM-DD"
   const dueTo = searchParams.get("dueTo"); // "YYYY-MM-DD"
 
-  const filter: Record<string, unknown> = {};
+  const filter: Record<string, unknown> = { workspaceId };
   if (category) filter.category = category;
   if (subcategory) filter.subcategory = subcategory;
   if (important === "true") filter.isImportant = true;
@@ -31,12 +32,12 @@ export async function GET(req: NextRequest) {
     .populate("uploadedBy", "name email")
     .lean();
 
-  return NextResponse.json(docs);
+  return NextResponse.json(await overlayUploaderDisplayNames(workspaceId, docs));
 }
 
 export async function POST(req: NextRequest) {
-  const session = await auth();
-  if (!session?.user) return NextResponse.json({ error: "לא מחובר" }, { status: 401 });
+  const { session, workspaceId, error } = await requireWorkspace();
+  if (error) return error;
 
   const body = await req.json();
   const {
@@ -66,13 +67,14 @@ export async function POST(req: NextRequest) {
   // אם תת-הקטגוריה חדשה - שומרים אותה לרשימה כדי שתופיע גם בעתיד
   if (subcategory) {
     await SubCategory.updateOne(
-      { category, name: subcategory },
-      { $setOnInsert: { category, name: subcategory } },
+      { workspaceId, category, name: subcategory },
+      { $setOnInsert: { workspaceId, category, name: subcategory } },
       { upsert: true }
     );
   }
 
   const doc = await DocumentModel.create({
+    workspaceId,
     title,
     category,
     subcategory: subcategory || undefined,
@@ -88,7 +90,7 @@ export async function POST(req: NextRequest) {
     fileName: fileName || undefined,
     fileMimeType: fileMimeType || undefined,
     fileSize: fileSize || undefined,
-    uploadedBy: (session.user as { id: string }).id,
+    uploadedBy: session!.user.id,
   });
 
   return NextResponse.json(doc, { status: 201 });

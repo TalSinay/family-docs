@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { auth } from "@/lib/auth";
+import { requireWorkspace } from "@/lib/requireWorkspace";
 import { connectToDatabase } from "@/lib/mongodb";
 import Task from "@/lib/models/Task";
 
@@ -9,8 +9,8 @@ export async function PATCH(
   req: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
-  const session = await auth();
-  if (!session?.user) return NextResponse.json({ error: "לא מחובר" }, { status: 401 });
+  const { workspaceId, error } = await requireWorkspace();
+  if (error) return error;
 
   const { id } = await params;
   const body = await req.json();
@@ -23,7 +23,7 @@ export async function PATCH(
   if (update.dueDate === "") update.dueDate = null;
 
   await connectToDatabase();
-  const task = await Task.findByIdAndUpdate(id, update, { new: true });
+  const task = await Task.findOneAndUpdate({ _id: id, workspaceId }, update, { new: true });
   if (!task) return NextResponse.json({ error: "משימה לא נמצאה" }, { status: 404 });
 
   return NextResponse.json(task);
@@ -33,12 +33,12 @@ export async function DELETE(
   req: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
-  const session = await auth();
-  if (!session?.user) return NextResponse.json({ error: "לא מחובר" }, { status: 401 });
+  const { workspaceId, error } = await requireWorkspace();
+  if (error) return error;
 
   const { id } = await params;
   await connectToDatabase();
-  await Task.findByIdAndDelete(id);
+  await Task.findOneAndDelete({ _id: id, workspaceId });
 
   return NextResponse.json({ ok: true });
 }

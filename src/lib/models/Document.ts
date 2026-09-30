@@ -3,6 +3,7 @@ import { MAIN_CATEGORIES } from "@/lib/categories";
 // ייבוא צד-אפקט: מבטיח שמודל "User" נרשם ב-mongoose לפני populate("uploadedBy"),
 // גם כשהקובץ הזה נטען לבדו ב-bundle נפרד (serverless function) שלא ייבא את User.ts ישירות.
 import "@/lib/models/User";
+import "@/lib/models/Workspace";
 
 export interface ICustomField {
   key: string;
@@ -11,6 +12,7 @@ export interface ICustomField {
 
 export interface IDocument {
   _id: mongoose.Types.ObjectId;
+  workspaceId: mongoose.Types.ObjectId;
   title: string;
   category: (typeof MAIN_CATEGORIES)[number];
   subcategory?: string;
@@ -46,6 +48,7 @@ const CustomFieldSchema = new Schema<ICustomField>(
 );
 
 const DocumentSchema = new Schema<IDocument>({
+  workspaceId: { type: Schema.Types.ObjectId, ref: "Workspace", required: true },
   title: { type: String, required: true },
   category: { type: String, required: true, enum: MAIN_CATEGORIES },
   subcategory: { type: String },
@@ -73,10 +76,10 @@ const DocumentSchema = new Schema<IDocument>({
   lastOpenedAt: { type: Date, default: Date.now },
 });
 
-DocumentSchema.index({ category: 1, subcategory: 1 });
-DocumentSchema.index({ isImportant: 1 });
-DocumentSchema.index({ lastOpenedAt: -1 });
-DocumentSchema.index({ uploadedAt: -1 });
-DocumentSchema.index({ dueDate: 1 });
+DocumentSchema.index({ workspaceId: 1, category: 1, subcategory: 1 });
+DocumentSchema.index({ workspaceId: 1, isImportant: 1 });
+DocumentSchema.index({ workspaceId: 1, lastOpenedAt: -1 });
+DocumentSchema.index({ workspaceId: 1, uploadedAt: -1 });
+DocumentSchema.index({ workspaceId: 1, dueDate: 1 });
 
 export default models.Document || model<IDocument>("Document", DocumentSchema);

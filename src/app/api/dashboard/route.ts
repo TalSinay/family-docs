@@ -1,11 +1,12 @@
 import { NextRequest, NextResponse } from "next/server";
-import { auth } from "@/lib/auth";
+import { requireWorkspace } from "@/lib/requireWorkspace";
 import { connectToDatabase } from "@/lib/mongodb";
 import DocumentModel from "@/lib/models/Document";
+import { overlayUploaderDisplayNames } from "@/lib/resolveDisplayNames";
 
 export async function GET(req: NextRequest) {
-  const session = await auth();
-  if (!session?.user) return NextResponse.json({ error: "לא מחובר" }, { status: 401 });
+  const { workspaceId, error } = await requireWorkspace();
+  if (error) return error;
 
   const { searchParams } = new URL(req.url);
   const monthParam = searchParams.get("month"); // צפוי בפורמט "YYYY-MM"
@@ -28,15 +29,27 @@ export async function GET(req: NextRequest) {
 
   const [expensesAgg, incomeAgg, recent, recurringSources] = await Promise.all([
     DocumentModel.aggregate([
-      { $match: { category: "הוצאות", uploadedAt: { $gte: monthStart, $lt: monthEnd } } },
+      {
+        $match: {
+          workspaceId,
+          category: "הוצאות",
+          uploadedAt: { $gte: monthStart, $lt: monthEnd },
+        },
+      },
       { $group: { _id: null, total: { $sum: "$amount" } } },
     ]),
     DocumentModel.aggregate([
-      { $match: { category: "הכנסות", uploadedAt: { $gte: monthStart, $lt: monthEnd } } },
+      {
+        $match: {
+          workspaceId,
+          category: "הכנסות",
+          uploadedAt: { $gte: monthStart, $lt: monthEnd },
+        },
+      },
       { $group: { _id: null, total: { $sum: "$amount" } } },
     ]),
     // "פעילות אחרונה" מוצגת בהתאם לחודש הנבחר, לא רק לחודש הנוכחי
-    DocumentModel.find({ uploadedAt: { $gte: monthStart, $lt: monthEnd } })
+    DocumentModel.find({ workspaceId, uploadedAt: { $gte: monthStart, $lt: monthEnd } })
       .sort({ uploadedAt: -1 })
       .limit(20)
       .populate("uploadedBy", "name")
@@ -45,6 +58,7 @@ export async function GET(req: NextRequest) {
     // בפועל לחודש הזה (ראה .github/workflows/monthly-expenses.yml) - מוצגים כתחזית,
     // כדי שסימון "תשלום חודשי" ישתקף בדשבורד מיידית, גם קדימה בזמן, בלי לחכות ל-1 לחודש.
     DocumentModel.find({
+      workspaceId,
       isMonthlyPayment: true,
       monthlyAmount: { $ne: null },
       category: { $in: ["הוצאות", "הכנסות"] },
@@ -71,7 +85,7 @@ export async function GET(req: NextRequest) {
     totalExpenses,
     totalIncome,
     balance: totalIncome - totalExpenses,
-    recentActivity: recent,
+    recentActivity: await overlayUploaderDisplayNames(workspaceId, recent),
     projectedCount,
   });
 }

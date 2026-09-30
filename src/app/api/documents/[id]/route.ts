@@ -1,35 +1,38 @@
 import { NextRequest, NextResponse } from "next/server";
-import { auth } from "@/lib/auth";
+import { requireWorkspace } from "@/lib/requireWorkspace";
 import { connectToDatabase } from "@/lib/mongodb";
 import DocumentModel from "@/lib/models/Document";
+import { overlayUploaderDisplayNames } from "@/lib/resolveDisplayNames";
 
 export async function GET(
   req: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
-  const session = await auth();
-  if (!session?.user) return NextResponse.json({ error: "לא מחובר" }, { status: 401 });
+  const { workspaceId, error } = await requireWorkspace();
+  if (error) return error;
 
   const { id } = await params;
   await connectToDatabase();
 
   // כל צפייה במסמך מעדכנת lastOpenedAt (לצורך "מסמכים אחרונים")
-  const doc = await DocumentModel.findByIdAndUpdate(
-    id,
+  // מוגבל ל-workspace הפעיל, כדי שלא ניתן יהיה לגשת למסמך של workspace אחר לפי מזהה
+  const doc = await DocumentModel.findOneAndUpdate(
+    { _id: id, workspaceId },
     { lastOpenedAt: new Date() },
     { new: true }
   ).populate("uploadedBy", "name email");
 
   if (!doc) return NextResponse.json({ error: "מסמך לא נמצא" }, { status: 404 });
-  return NextResponse.json(doc);
+  const [withDisplayName] = await overlayUploaderDisplayNames(workspaceId, [doc.toObject()]);
+  return NextResponse.json(withDisplayName);
 }
 
 export async function PATCH(
   req: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
-  const session = await auth();
-  if (!session?.user) return NextResponse.json({ error: "לא מחובר" }, { status: 401 });
+  const { workspaceId, error } = await requireWorkspace();
+  if (error) return error;
 
   const { id } = await params;
   const body = await req.json();
@@ -55,7 +58,9 @@ export async function PATCH(
   if (update.dueDate === "") update.dueDate = null;
 
   await connectToDatabase();
-  const doc = await DocumentModel.findByIdAndUpdate(id, update, { new: true });
+  const doc = await DocumentModel.findOneAndUpdate({ _id: id, workspaceId }, update, {
+    new: true,
+  });
   if (!doc) return NextResponse.json({ error: "מסמך לא נמצא" }, { status: 404 });
 
   return NextResponse.json(doc);
@@ -65,12 +70,12 @@ export async function DELETE(
   req: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
-  const session = await auth();
-  if (!session?.user) return NextResponse.json({ error: "לא מחובר" }, { status: 401 });
+  const { workspaceId, error } = await requireWorkspace();
+  if (error) return error;
 
   const { id } = await params;
   await connectToDatabase();
-  await DocumentModel.findByIdAndDelete(id);
+  await DocumentModel.findOneAndDelete({ _id: id, workspaceId });
 
   return NextResponse.json({ ok: true });
 }
