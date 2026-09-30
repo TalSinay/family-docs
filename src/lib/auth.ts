@@ -123,12 +123,18 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
         }
       }
 
-      // מאפשר למסך "בחירת workspace" להחליף workspace פעיל בלי כניסה מחדש,
-      // דרך useSession().update({ activeWorkspaceId }).
-      if (trigger === "update" && session?.activeWorkspaceId) {
-        const claims = (token.workspaces as WorkspaceClaim[] | undefined) || [];
-        if (claims.some((c) => c.id === session.activeWorkspaceId)) {
+      // מאפשר למסך "בחירת workspace" להחליף workspace פעיל בלי כניסה מחדש, דרך
+      // useSession().update({ activeWorkspaceId }) - וגם טוען מחדש את רשימת ה-
+      // workspace-ים מה-DB בכל update (לא רק את הרשימה הישנה מה-JWT), כדי שאם
+      // admin שייך את המשתמש ל-workspace חדש באמצע ה-session, הוא יופיע מיד
+      // (כולל ב-AppShell שקורא update() פעם אחת בטעינת הדף), בלי צורך בכניסה מחדש.
+      if (trigger === "update" && token.id) {
+        const claims = await loadWorkspaceClaims(token.id as string, (token.name as string) || "");
+        token.workspaces = claims;
+        if (session?.activeWorkspaceId && claims.some((c) => c.id === session.activeWorkspaceId)) {
           token.activeWorkspaceId = session.activeWorkspaceId;
+        } else if (!claims.some((c) => c.id === token.activeWorkspaceId)) {
+          token.activeWorkspaceId = claims[0]?.id;
         }
       }
 

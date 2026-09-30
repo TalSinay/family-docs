@@ -2,7 +2,7 @@
 
 import { usePathname } from "next/navigation";
 import { useSession, signOut } from "next-auth/react";
-import { ReactNode } from "react";
+import { ReactNode, useEffect, useRef } from "react";
 import Link from "next/link";
 import { LogOut } from "lucide-react";
 import { BottomNav } from "./BottomNav";
@@ -13,9 +13,20 @@ const AUTH_PAGES = ["/login", "/admin/login"];
 
 export function AppShell({ children }: { children: ReactNode }) {
   const pathname = usePathname();
-  const { data: session } = useSession();
+  const { data: session, update } = useSession();
   const isAuthPage = AUTH_PAGES.includes(pathname);
   const isAdminArea = pathname.startsWith("/admin");
+
+  // מרענן פעם אחת בכל טעינת דף את רשימת ה-workspace-ים מה-session (לא רק מה-JWT
+  // הישן), כדי שאם admin שייך את המשתמש ל-workspace חדש באמצע ה-session הקודם,
+  // הוא יופיע בבורר בלי צורך בהתנתקות/התחברות מחדש.
+  const refreshedRef = useRef(false);
+  useEffect(() => {
+    if (session?.user && !refreshedRef.current) {
+      refreshedRef.current = true;
+      update();
+    }
+  }, [session?.user, update]);
 
   if (isAuthPage) {
     return <main className="flex-1 flex items-center justify-center p-4">{children}</main>;
