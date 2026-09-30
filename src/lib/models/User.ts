@@ -14,6 +14,12 @@ export interface IUser {
   otpCodeHash?: string;
   otpExpiresAt?: Date;
   otpAttempts?: number;
+
+  // שדות "שכחתי סיסמה" - רלוונטיים רק ל-admin, נפרדים משדות ה-OTP של הכניסה הרגילה
+  // כדי שלא יתנגשו אם שני התהליכים מתבצעים במקביל.
+  resetCodeHash?: string;
+  resetExpiresAt?: Date;
+  resetAttempts?: number;
 }
 
 const UserSchema = new Schema<IUser>({
@@ -26,6 +32,10 @@ const UserSchema = new Schema<IUser>({
   otpCodeHash: { type: String },
   otpExpiresAt: { type: Date },
   otpAttempts: { type: Number, default: 0 },
+
+  resetCodeHash: { type: String },
+  resetExpiresAt: { type: Date },
+  resetAttempts: { type: Number, default: 0 },
 });
 
 export default models.User || model<IUser>("User", UserSchema);
