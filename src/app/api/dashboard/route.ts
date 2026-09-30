@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import mongoose from "mongoose";
 import { requireWorkspace } from "@/lib/requireWorkspace";
 import { connectToDatabase } from "@/lib/mongodb";
 import DocumentModel from "@/lib/models/Document";
@@ -27,11 +28,16 @@ export async function GET(req: NextRequest) {
   const monthStart = new Date(year, month, 1);
   const monthEnd = new Date(year, month + 1, 1);
 
+  // חשוב: אגרגציה (aggregate) לא עוברת דרך ה-casting האוטומטי של mongoose כמו
+  // find(), אז workspaceId (מחרוזת) חייב להיות מומר במפורש ל-ObjectId - אחרת
+  // ה-$match לא תואם שום מסמך, וה"הכנסות"/"הוצאות" מוצגים כ-0 בטעות.
+  const workspaceObjectId = new mongoose.Types.ObjectId(workspaceId);
+
   const [expensesAgg, incomeAgg, recent, recurringSources] = await Promise.all([
     DocumentModel.aggregate([
       {
         $match: {
-          workspaceId,
+          workspaceId: workspaceObjectId,
           category: "הוצאות",
           uploadedAt: { $gte: monthStart, $lt: monthEnd },
         },
@@ -41,7 +47,7 @@ export async function GET(req: NextRequest) {
     DocumentModel.aggregate([
       {
         $match: {
-          workspaceId,
+          workspaceId: workspaceObjectId,
           category: "הכנסות",
           uploadedAt: { $gte: monthStart, $lt: monthEnd },
         },
