@@ -54,6 +54,12 @@ node scripts/migrate-to-workspaces.js --admin-email=you@example.com
 
 לאחר מכן היכנס לאזור הניהול ב-`/admin/login` עם האימייל/סיסמה של אותו משתמש (יישלח קוד אימות למייל), וצור/שייך משתמשים ו-workspace-ים נוספים.
 
+שכחת את הסיסמה? אפשר לאפס אותה בכל שלב (גם לפני שיש admin) עם:
+
+```bash
+node scripts/reset-password.js --email=you@example.com --password="סיסמה חדשה"
+```
+
 ### 3. פריסה ל-Vercel (חינם)
 
 1. הרשם ב-[vercel.com](https://vercel.com) עם GitHub.
@@ -101,6 +107,7 @@ src/
     resend.ts            שליחת קוד אימות (2FA) למייל האדמין
 scripts/
   migrate-to-workspaces.js   הגירה חד-פעמית למבנה multi-tenant + יצירת admin ראשון
+  reset-password.js          איפוס סיסמה של משתמש קיים (למשל אם שכחת את סיסמת ה-admin)
 .github/workflows/     אוטומציית ה-cron החודשי
 ```
 
