@@ -3,6 +3,7 @@
 import { useEffect, useState, use } from "react";
 import Link from "next/link";
 import { ArrowRight, Trash2, Plus, Save } from "lucide-react";
+import { DEFAULT_SUBCATEGORIES } from "@/lib/categories";
 
 type Member = {
   _id: string;
@@ -14,12 +15,14 @@ type UserRow = { _id: string; name: string; email: string };
 export default function WorkspaceDetailPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = use(params);
   const [name, setName] = useState("");
+  const [generalLabels, setGeneralLabels] = useState<string[]>([]);
   const [members, setMembers] = useState<Member[]>([]);
   const [allUsers, setAllUsers] = useState<UserRow[]>([]);
   const [selectedUserId, setSelectedUserId] = useState("");
   const [newDisplayName, setNewDisplayName] = useState("");
   const [displayNameEdits, setDisplayNameEdits] = useState<Record<string, string>>({});
   const [error, setError] = useState("");
+  const [labelsSavedMsg, setLabelsSavedMsg] = useState("");
   const [loading, setLoading] = useState(true);
 
   async function loadAll() {
@@ -31,6 +34,9 @@ export default function WorkspaceDetailPage({ params }: { params: Promise<{ id: 
     const workspaces = await wsRes.json();
     const ws = workspaces.find((w: { _id: string; name: string }) => w._id === id);
     setName(ws?.name || "");
+    setGeneralLabels(
+      ws?.generalLabels?.length ? ws.generalLabels : [...DEFAULT_SUBCATEGORIES["כללי"]]
+    );
     const membersData: Member[] = await membersRes.json();
     setMembers(membersData);
     setDisplayNameEdits(
@@ -96,6 +102,35 @@ export default function WorkspaceDetailPage({ params }: { params: Promise<{ id: 
     loadAll();
   }
 
+  function updateGeneralLabel(i: number, value: string) {
+    setGeneralLabels((prev) => prev.map((l, idx) => (idx === i ? value : l)));
+  }
+  function addGeneralLabel() {
+    setGeneralLabels((prev) => [...prev, ""]);
+  }
+  function removeGeneralLabel(i: number) {
+    setGeneralLabels((prev) => prev.filter((_, idx) => idx !== i));
+  }
+
+  async function saveGeneralLabels(e: React.FormEvent) {
+    e.preventDefault();
+    setError("");
+    setLabelsSavedMsg("");
+    const res = await fetch(`/api/admin/workspaces/${id}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ generalLabels: generalLabels.filter((l) => l.trim()) }),
+    });
+    const data = await res.json();
+    if (!res.ok) {
+      setError(data.error || "שגיאה");
+      return;
+    }
+    setLabelsSavedMsg("נשמר");
+    setTimeout(() => setLabelsSavedMsg(""), 2000);
+    loadAll();
+  }
+
   async function removeMember(userId: string) {
     if (!confirm("להסיר את המשתמש מה-workspace הזה?")) return;
     const res = await fetch(`/api/admin/workspaces/${id}/members/${userId}`, {
@@ -126,6 +161,46 @@ export default function WorkspaceDetailPage({ params }: { params: Promise<{ id: 
           <button type="submit" className="btn-primary flex items-center gap-1 shrink-0">
             <Save size={16} /> שמירה
           </button>
+        </form>
+      </section>
+
+      <section className="card p-5">
+        <label className="label">תוויות מותאמות בקטגוריית &quot;כללי&quot;</label>
+        <p className="text-xs text-slate-400 mb-3">
+          אלו תתי-הקטגוריות המוצעות בקטגוריית &quot;כללי&quot; עבור ה-workspace הזה בלבד (לדוגמה
+          שמות בני המשפחה) - אפשר לשנות אותן בלי להשפיע על workspace-ים אחרים.
+        </p>
+        <form onSubmit={saveGeneralLabels} className="space-y-2">
+          {generalLabels.map((label, i) => (
+            <div key={i} className="flex gap-2">
+              <input
+                className="input"
+                value={label}
+                onChange={(e) => updateGeneralLabel(i, e.target.value)}
+                placeholder="לדוגמה: מסמכים דן"
+              />
+              <button
+                type="button"
+                onClick={() => removeGeneralLabel(i)}
+                className="shrink-0 text-slate-400 hover:text-red-600"
+              >
+                <Trash2 size={18} />
+              </button>
+            </div>
+          ))}
+          <div className="flex items-center gap-3">
+            <button
+              type="button"
+              onClick={addGeneralLabel}
+              className="text-teal-700 text-sm font-medium flex items-center gap-1"
+            >
+              <Plus size={16} /> הוספת תווית
+            </button>
+            <button type="submit" className="btn-secondary flex items-center gap-1 mr-auto">
+              <Save size={16} /> שמירה
+            </button>
+            {labelsSavedMsg && <span className="text-sm text-emerald-600">{labelsSavedMsg}</span>}
+          </div>
         </form>
       </section>
 

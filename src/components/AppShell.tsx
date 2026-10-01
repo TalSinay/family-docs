@@ -4,7 +4,7 @@ import { usePathname } from "next/navigation";
 import { useSession, signOut } from "next-auth/react";
 import { ReactNode, useEffect, useRef } from "react";
 import Link from "next/link";
-import { LogOut } from "lucide-react";
+import { LogOut, RefreshCw, ShieldCheck } from "lucide-react";
 import { BottomNav } from "./BottomNav";
 import { UploadButton } from "./UploadButton";
 import { WorkspaceSwitcher } from "./WorkspaceSwitcher";
@@ -53,6 +53,26 @@ export function AppShell({ children }: { children: ReactNode }) {
                 />
               )}
               <span className="truncate">שלום, {session.user.displayName || session.user.name}</span>
+              {session.user.isAdmin && (
+                <>
+                  <button
+                    onClick={() => window.location.reload()}
+                    className="p-1.5 rounded-full hover:bg-slate-100 shrink-0"
+                    aria-label="רענון האפליקציה"
+                    title="רענון האפליקציה"
+                  >
+                    <RefreshCw size={16} />
+                  </button>
+                  <Link
+                    href="/admin"
+                    className="p-1.5 rounded-full hover:bg-slate-100 shrink-0"
+                    aria-label="מעבר לאזור ניהול"
+                    title="אזור ניהול"
+                  >
+                    <ShieldCheck size={16} />
+                  </Link>
+                </>
+              )}
               <button
                 onClick={() => signOut({ callbackUrl: "/login" })}
                 className="p-1.5 rounded-full hover:bg-slate-100 shrink-0"
