@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { useSession } from "next-auth/react";
 import Link from "next/link";
-import { ChevronRight, ChevronLeft, TrendingDown, TrendingUp, Scale, BarChart3 } from "lucide-react";
+import { ChevronRight, ChevronLeft, TrendingDown, TrendingUp, Scale, BarChart3, Upload } from "lucide-react";
 import { DocumentCard } from "@/components/DocumentCard";
 import { formatCurrency, HEBREW_MONTHS } from "@/lib/format";
 
@@ -107,9 +107,14 @@ export default function DashboardPage() {
         ) : (
           <span />
         )}
-        <Link href="/reports" className="flex items-center gap-1 text-xs text-teal-700 font-medium">
-          <BarChart3 size={14} /> דוחות שנתיים וטווח מותאם
-        </Link>
+        <div className="flex items-center gap-3">
+          <Link href="/import" className="flex items-center gap-1 text-xs text-teal-700 font-medium">
+            <Upload size={14} /> ייבוא הוצאות מקובץ
+          </Link>
+          <Link href="/reports" className="flex items-center gap-1 text-xs text-teal-700 font-medium">
+            <BarChart3 size={14} /> דוחות שנתיים וטווח מותאם
+          </Link>
+        </div>
       </div>
 
       <div className="grid grid-cols-3 gap-3">
