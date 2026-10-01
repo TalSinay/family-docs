@@ -24,15 +24,16 @@ function guessColumn(headers: string[], hints: string[]): string {
   return "";
 }
 
-// תומך בפורמטים נפוצים בייצוא ישראלי: DD/MM/YYYY, DD/MM/YY, YYYY-MM-DD.
+// תומך בפורמטים נפוצים בייצוא ישראלי: DD/MM/YYYY, DD-MM-YYYY, DD.MM.YYYY, גרסאות
+// עם שנה דו-ספרתית, וגם YYYY-MM-DD. קובץ Max למשל משתמש ב-DD-MM-YYYY עם מקפים.
 function parseDate(raw: string): string | null {
   const s = raw.trim();
-  let m = s.match(/^(\d{1,2})[/.](\d{1,2})[/.](\d{4})$/);
+  let m = s.match(/^(\d{1,2})[/.-](\d{1,2})[/.-](\d{4})$/);
   if (m) {
     const [, d, mo, y] = m;
     return `${y}-${mo.padStart(2, "0")}-${d.padStart(2, "0")}`;
   }
-  m = s.match(/^(\d{1,2})[/.](\d{1,2})[/.](\d{2})$/);
+  m = s.match(/^(\d{1,2})[/.-](\d{1,2})[/.-](\d{2})$/);
   if (m) {
     const [, d, mo, y] = m;
     return `20${y}-${mo.padStart(2, "0")}-${d.padStart(2, "0")}`;
