@@ -1,15 +1,34 @@
+import { redirect } from "next/navigation";
+import { auth } from "@/lib/auth";
 import { connectToDatabase } from "@/lib/mongodb";
 import DocumentModel from "@/lib/models/Document";
 import { DocumentCard } from "@/components/DocumentCard";
+import { overlayUploaderDisplayNames } from "@/lib/resolveDisplayNames";
 
 export const dynamic = "force-dynamic";
 
 export default async function RecentPage() {
+  const session = await auth();
+  const workspaceId = session?.user?.activeWorkspaceId;
+  if (!session?.user || !workspaceId) redirect("/login");
+
   await connectToDatabase();
 
+  const [recentlyOpenedRaw, recentlyUploadedRaw] = await Promise.all([
+    DocumentModel.find({ workspaceId })
+      .sort({ lastOpenedAt: -1 })
+      .limit(10)
+      .populate("uploadedBy", "name")
+      .lean(),
+    DocumentModel.find({ workspaceId })
+      .sort({ uploadedAt: -1 })
+      .limit(10)
+      .populate("uploadedBy", "name")
+      .lean(),
+  ]);
   const [recentlyOpened, recentlyUploaded] = await Promise.all([
-    DocumentModel.find().sort({ lastOpenedAt: -1 }).limit(10).populate("uploadedBy", "name").lean(),
-    DocumentModel.find().sort({ uploadedAt: -1 }).limit(10).populate("uploadedBy", "name").lean(),
+    overlayUploaderDisplayNames(workspaceId, recentlyOpenedRaw),
+    overlayUploaderDisplayNames(workspaceId, recentlyUploadedRaw),
   ]);
 
   return (

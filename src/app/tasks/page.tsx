@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
+import { useSession } from "next-auth/react";
 import { Plus, Trash2, CalendarDays } from "lucide-react";
 import clsx from "clsx";
 
@@ -26,6 +27,10 @@ function isOverdue(task: TaskItem, todayStr: string) {
 }
 
 export default function TasksPage() {
+  // ה-workspace הפעיל, כדי שמעבר בין workspace-ים ירענן מיד את רשימת המשימות.
+  const { data: session } = useSession();
+  const activeWorkspaceId = session?.user?.activeWorkspaceId;
+
   const [mounted, setMounted] = useState(false);
   const [todayStr, setTodayStr] = useState("");
   const [tasks, setTasks] = useState<TaskItem[]>([]);
@@ -55,9 +60,10 @@ export default function TasksPage() {
 
   useEffect(() => {
     if (!mounted) return;
-    // eslint-disable-next-line react-hooks/set-state-in-effect -- טעינה ראשונית של המשימות, לא לולאת render
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- טעינת המשימות לפי workspace, לא לולאת render
     fetchTasks();
-  }, [mounted, fetchTasks]);
+    // activeWorkspaceId בתלויות בכוונה: מעבר workspace מרענן מיד, בלי ניווט מלא.
+  }, [mounted, fetchTasks, activeWorkspaceId]);
 
   async function addTask() {
     if (!title.trim()) return;

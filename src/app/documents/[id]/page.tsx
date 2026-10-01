@@ -1,5 +1,6 @@
-import { notFound } from "next/navigation";
+import { notFound, redirect } from "next/navigation";
 import mongoose from "mongoose";
+import { auth } from "@/lib/auth";
 import { connectToDatabase } from "@/lib/mongodb";
 import DocumentModel from "@/lib/models/Document";
 import { DocumentDetail } from "@/components/DocumentDetail";
@@ -15,11 +16,16 @@ export default async function DocumentPage({
 
   if (!mongoose.isValidObjectId(id)) notFound();
 
+  const session = await auth();
+  const workspaceId = session?.user?.activeWorkspaceId;
+  if (!session?.user || !workspaceId) redirect("/login");
+
   await connectToDatabase();
 
-  // צפייה בעמוד = עדכון lastOpenedAt (לצורך "נפתחו לאחרונה")
-  const doc = await DocumentModel.findByIdAndUpdate(
-    id,
+  // צפייה בעמוד = עדכון lastOpenedAt (לצורך "נפתחו לאחרונה") - רק אם המסמך שייך
+  // ל-workspace הפעיל של המשתמש, אחרת לא נחשפת אפילו עובדת הקיום שלו.
+  const doc = await DocumentModel.findOneAndUpdate(
+    { _id: id, workspaceId },
     { lastOpenedAt: new Date() },
     { new: true }
   )

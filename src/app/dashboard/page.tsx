@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
+import { useSession } from "next-auth/react";
 import Link from "next/link";
 import { ChevronRight, ChevronLeft, TrendingDown, TrendingUp, Scale, BarChart3 } from "lucide-react";
 import { DocumentCard } from "@/components/DocumentCard";
@@ -25,6 +26,10 @@ type DashboardData = {
 };
 
 export default function DashboardPage() {
+  // ה-workspace הפעיל, כדי שמעבר בין workspace-ים ירענן מיד את הדשבורד.
+  const { data: session } = useSession();
+  const activeWorkspaceId = session?.user?.activeWorkspaceId;
+
   // "החודש הנוכחי" נקבע רק בדפדפן, כדי שיתאים לאזור הזמן של המשתמש
   // ולא ליצור פער בין ה-HTML הראשוני של השרת לזה של הלקוח.
   const [mounted, setMounted] = useState(false);
@@ -53,9 +58,10 @@ export default function DashboardPage() {
 
   useEffect(() => {
     if (!mounted) return;
-    // eslint-disable-next-line react-hooks/set-state-in-effect -- טעינת נתונים לפי חודש, לא לולאת render
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- טעינת נתונים לפי חודש/workspace, לא לולאת render
     fetchDashboard(monthKey);
-  }, [mounted, monthKey, fetchDashboard]);
+    // activeWorkspaceId בתלויות בכוונה: מעבר workspace מרענן מיד, בלי ניווט מלא.
+  }, [mounted, monthKey, fetchDashboard, activeWorkspaceId]);
 
   const isCurrentMonth = mounted && monthKey === `${new Date().getFullYear()}-${String(new Date().getMonth() + 1).padStart(2, "0")}`;
 

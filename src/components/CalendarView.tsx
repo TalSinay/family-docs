@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState, useCallback } from "react";
+import { useSession } from "next-auth/react";
 import Link from "next/link";
 import { ChevronRight, ChevronLeft, Plus, Trash2, ExternalLink } from "lucide-react";
 import clsx from "clsx";
@@ -51,6 +52,11 @@ function formatDayHeader(dateStr: string) {
 }
 
 export function CalendarView() {
+  // ה-workspace הפעיל, כדי שמעבר בין workspace-ים (WorkspaceSwitcher) ירענן
+  // מיד את הנתונים המוצגים כאן ולא ישאיר מידע "תקוע" מה-workspace הקודם.
+  const { data: session } = useSession();
+  const activeWorkspaceId = session?.user?.activeWorkspaceId;
+
   // "מה היום" נקבע אך ורק בדפדפן (לא בשרת), כדי שלא יהיה פער בין אזור הזמן
   // של השרת לזה של המשתמש - וכדי שה-HTML הראשוני יהיה זהה בשרת ובלקוח.
   const [mounted, setMounted] = useState(false);
@@ -129,12 +135,14 @@ export function CalendarView() {
 
   useEffect(() => {
     if (!mounted) return;
-    // eslint-disable-next-line react-hooks/set-state-in-effect -- טעינת נתונים לפי חודש, לא לולאת render
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- טעינת נתונים לפי חודש/workspace, לא לולאת render
     fetchHolidays();
     fetchEvents();
     fetchTasks();
     fetchDocDues();
-  }, [mounted, fetchHolidays, fetchEvents, fetchTasks, fetchDocDues]);
+    // activeWorkspaceId בתלויות בכוונה: כשמחליפים workspace דרך הבורר, הנתונים
+    // המוצגים כאן מתרעננים מיד ולא נשארים מהworkspace הקודם עד לניווט מלא.
+  }, [mounted, fetchHolidays, fetchEvents, fetchTasks, fetchDocDues, activeWorkspaceId]);
 
   // כל הפריטים (חגים, אירועים, משימות עם תאריך יעד, מסמכים עם תאריך יעד) מקובצים לפי יום,
   // כדי שיוצגו ישירות בתא של כל יום בתצוגת החודש - בלי צורך ללחוץ על היום

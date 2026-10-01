@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
+import { useSession } from "next-auth/react";
 import Link from "next/link";
 import { ChevronRight, ChevronLeft, TrendingDown, TrendingUp, Scale, ArrowRight } from "lucide-react";
 import {
@@ -31,6 +32,10 @@ function monthInputValue(year: number, month0: number) {
 }
 
 export default function ReportsPage() {
+  // ה-workspace הפעיל, כדי שמעבר בין workspace-ים ירענן מיד את הדוח.
+  const { data: session } = useSession();
+  const activeWorkspaceId = session?.user?.activeWorkspaceId;
+
   const [mounted, setMounted] = useState(false);
   const [mode, setMode] = useState<"year" | "range">("year");
 
@@ -70,12 +75,13 @@ export default function ReportsPage() {
   useEffect(() => {
     if (!mounted) return;
     if (mode === "year") {
-      // eslint-disable-next-line react-hooks/set-state-in-effect -- טעינת נתוני השנה הנבחרת, לא לולאת render
+      // eslint-disable-next-line react-hooks/set-state-in-effect -- טעינת נתוני השנה/workspace הנבחרים, לא לולאת render
       fetchReport(`${year}-01`, `${year}-12`);
     } else if (appliedRange) {
       fetchReport(appliedRange.from, appliedRange.to);
     }
-  }, [mounted, mode, year, appliedRange, fetchReport]);
+    // activeWorkspaceId בתלויות בכוונה: מעבר workspace מרענן מיד, בלי ניווט מלא.
+  }, [mounted, mode, year, appliedRange, fetchReport, activeWorkspaceId]);
 
   function applyRange() {
     if (!rangeFrom || !rangeTo) return;

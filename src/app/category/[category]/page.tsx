@@ -1,5 +1,6 @@
 import Link from "next/link";
-import { notFound } from "next/navigation";
+import { notFound, redirect } from "next/navigation";
+import { auth } from "@/lib/auth";
 import { connectToDatabase } from "@/lib/mongodb";
 import DocumentModel from "@/lib/models/Document";
 import SubCategoryModel from "@/lib/models/SubCategory";
@@ -24,11 +25,15 @@ export default async function CategoryPage({
     notFound();
   }
 
+  const session = await auth();
+  const workspaceId = session?.user?.activeWorkspaceId;
+  if (!session?.user || !workspaceId) redirect("/login");
+
   await connectToDatabase();
 
   const [customSubs, docs] = await Promise.all([
-    SubCategoryModel.find({ category }).lean(),
-    DocumentModel.find({ category, ...(sub ? { subcategory: sub } : {}) })
+    SubCategoryModel.find({ category, workspaceId }).lean(),
+    DocumentModel.find({ workspaceId, category, ...(sub ? { subcategory: sub } : {}) })
       .sort({ uploadedAt: -1 })
       .populate("uploadedBy", "name")
       .lean(),

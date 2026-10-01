@@ -1,3 +1,5 @@
+import { redirect } from "next/navigation";
+import { auth } from "@/lib/auth";
 import { connectToDatabase } from "@/lib/mongodb";
 import DocumentModel from "@/lib/models/Document";
 import { DocumentCard } from "@/components/DocumentCard";
@@ -5,8 +7,12 @@ import { DocumentCard } from "@/components/DocumentCard";
 export const dynamic = "force-dynamic";
 
 export default async function ImportantPage() {
+  const session = await auth();
+  const workspaceId = session?.user?.activeWorkspaceId;
+  if (!session?.user || !workspaceId) redirect("/login");
+
   await connectToDatabase();
-  const docs = await DocumentModel.find({ isImportant: true })
+  const docs = await DocumentModel.find({ workspaceId, isImportant: true })
     .sort({ uploadedAt: -1 })
     .populate("uploadedBy", "name")
     .lean();
