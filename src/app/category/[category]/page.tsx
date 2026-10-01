@@ -4,6 +4,7 @@ import { auth } from "@/lib/auth";
 import { connectToDatabase } from "@/lib/mongodb";
 import DocumentModel from "@/lib/models/Document";
 import SubCategoryModel from "@/lib/models/SubCategory";
+import Workspace from "@/lib/models/Workspace";
 import { DocumentCard } from "@/components/DocumentCard";
 import { DEFAULT_SUBCATEGORIES, MAIN_CATEGORIES, MainCategory } from "@/lib/categories";
 import clsx from "clsx";
@@ -31,17 +32,23 @@ export default async function CategoryPage({
 
   await connectToDatabase();
 
-  const [customSubs, docs] = await Promise.all([
+  const [customSubs, docs, workspace] = await Promise.all([
     SubCategoryModel.find({ category, workspaceId }).lean(),
     DocumentModel.find({ workspaceId, category, ...(sub ? { subcategory: sub } : {}) })
       .sort({ uploadedAt: -1 })
       .populate("uploadedBy", "name")
       .lean(),
+    Workspace.findById(workspaceId).select("generalLabels").lean(),
   ]);
 
-  const subcategories = Array.from(
-    new Set([...DEFAULT_SUBCATEGORIES[category], ...customSubs.map((c) => c.name)])
-  );
+  // בקטגוריית "כללי" ניתן להתאים אישית פר-workspace את תתי-הקטגוריות המוצעות
+  // (לדוגמה שמות בני המשפחה) - אם הוגדרו, משתמשים בהן במקום ברירת המחדל
+  // הגלובלית, בדיוק כמו ב-/api/subcategories.
+  const defaults =
+    category === "כללי" && workspace?.generalLabels?.length
+      ? workspace.generalLabels
+      : DEFAULT_SUBCATEGORIES[category];
+  const subcategories = Array.from(new Set([...defaults, ...customSubs.map((c) => c.name)]));
 
   return (
     <div className="space-y-4">
