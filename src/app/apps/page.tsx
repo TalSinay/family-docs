@@ -1,6 +1,34 @@
+"use client";
+
 import Link from "next/link";
 import { ArrowRight, ExternalLink } from "lucide-react";
-import { EXTERNAL_APPS } from "@/lib/externalApps";
+import { EXTERNAL_APPS, type ExternalApp } from "@/lib/externalApps";
+
+// מנסה לפתוח custom URL scheme של אפליקציה מותקנת (למשל "maxit://"); אם בתוך
+// זמן קצר הדפדפן לא "עזב" את העמוד (כלומר האפליקציה לא נפתחה - לרוב כי היא לא
+// מותקנת, או שה-scheme שגוי), נופלים חזרה לאתר הרשמי בטאב חדש. זה לא Universal
+// Link רשמי - רק ניסיון מיטבי, כי Max/דיסקונט/Cal לא חושפים API רשמי לכך.
+function openApp(app: ExternalApp) {
+  if (!app.scheme) {
+    window.open(app.url, "_blank", "noopener,noreferrer");
+    return;
+  }
+
+  let appOpened = false;
+  const onVisibilityChange = () => {
+    if (document.hidden) appOpened = true;
+  };
+  document.addEventListener("visibilitychange", onVisibilityChange);
+
+  window.location.href = app.scheme;
+
+  setTimeout(() => {
+    document.removeEventListener("visibilitychange", onVisibilityChange);
+    if (!appOpened) {
+      window.open(app.url, "_blank", "noopener,noreferrer");
+    }
+  }, 1200);
+}
 
 export default function AppsPage() {
   return (
@@ -12,17 +40,16 @@ export default function AppsPage() {
       <div>
         <h1 className="text-xl font-bold">📱 האפליקציות שלי</h1>
         <p className="text-sm text-slate-500 mt-1">
-          לחיצה על אייקון פותחת את האפליקציה הרשמית אם היא מותקנת בטלפון, או את האתר בדפדפן אם לא.
+          לחיצה על אייקון מנסה לפתוח את האפליקציה המותקנת ישירות; אם זה לא מצליח (האפליקציה לא
+          מותקנת, או שהמנגנון לא נתמך בגרסה שלה), ייפתח האתר בדפדפן במקום.
         </p>
       </div>
 
       <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
         {EXTERNAL_APPS.map((app) => (
-          <a
+          <button
             key={app.id}
-            href={app.url}
-            target="_blank"
-            rel="noopener noreferrer"
+            onClick={() => openApp(app)}
             className="card p-5 flex flex-col items-center gap-2 hover:border-teal-300 transition-colors"
           >
             <div
@@ -34,7 +61,7 @@ export default function AppsPage() {
               {app.name}
               <ExternalLink size={12} className="text-slate-400" />
             </span>
-          </a>
+          </button>
         ))}
       </div>
     </div>
