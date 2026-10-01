@@ -4,7 +4,7 @@ import { usePathname } from "next/navigation";
 import { useSession, signOut } from "next-auth/react";
 import { ReactNode, useEffect, useRef } from "react";
 import Link from "next/link";
-import { LogOut, RefreshCw, ShieldCheck } from "lucide-react";
+import { LogOut, RefreshCw, ShieldCheck, UserCircle } from "lucide-react";
 import { BottomNav } from "./BottomNav";
 import { UploadButton } from "./UploadButton";
 import { WorkspaceSwitcher } from "./WorkspaceSwitcher";
@@ -52,7 +52,15 @@ export function AppShell({ children }: { children: ReactNode }) {
                   activeWorkspaceId={session.user.activeWorkspaceId}
                 />
               )}
-              <span className="truncate">שלום, {session.user.displayName || session.user.name}</span>
+              <Link
+                href="/profile"
+                className="flex items-center gap-1.5 truncate hover:text-teal-700"
+                aria-label="אזור אישי"
+                title="אזור אישי"
+              >
+                <UserCircle size={18} className="shrink-0" />
+                <span className="truncate">שלום, {session.user.displayName || session.user.name}</span>
+              </Link>
               {session.user.isAdmin && (
                 <>
                   <button

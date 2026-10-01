@@ -114,6 +114,7 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
       if (user) {
         const u = user as { id: string; name?: string | null; role?: string };
         token.id = u.id;
+        token.name = u.name;
         token.role = u.role ?? "member";
         token.isAdmin = u.role === "admin";
         const claims = await loadWorkspaceClaims(u.id, u.name || "");
@@ -129,6 +130,12 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
       // admin שייך את המשתמש ל-workspace חדש באמצע ה-session, הוא יופיע מיד
       // (כולל ב-AppShell שקורא update() פעם אחת בטעינת הדף), בלי צורך בכניסה מחדש.
       if (trigger === "update" && token.id) {
+        // עדכון שם אישי מעמוד "אזור אישי" - מגיע מ-useSession().update({ name }), כדי
+        // שהשינוי ישתקף מיד בכל מקום שמציג את שם המשתמש בלי צורך בכניסה מחדש.
+        if (session?.name && typeof session.name === "string") {
+          token.name = session.name;
+        }
+
         const claims = await loadWorkspaceClaims(token.id as string, (token.name as string) || "");
         token.workspaces = claims;
         if (session?.activeWorkspaceId && claims.some((c) => c.id === session.activeWorkspaceId)) {
