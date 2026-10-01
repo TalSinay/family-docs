@@ -1,16 +1,19 @@
 // קישורים מהירים לאפליקציות/אתרים חיצוניים (לא קשור למודל המסמכים/הקטגוריות
 // הפנימי - זו רשימה נפרדת לגמרי, מנוהלת כאן בקוד).
 //
-// אם מוגדר `scheme` - לחיצה מנסה קודם לפתוח את האפליקציה המותקנת ישירות דרך
-// custom URL scheme (ראו src/app/apps/page.tsx להסבר על מנגנון ה-fallback),
-// ורק אם זה לא הצליח (האפליקציה לא מותקנת, או שה-scheme שגוי) עוברים לאתר.
-// זה לא Universal Link רשמי (אלו לא מתועדים/לא נתמכים ע"י החברות האלה), אלא
-// ניסיון מיטבי (best-effort) שעלול לא לעבוד לכל אפליקציה/גרסה.
+// אם מוגדר `schemes` - לחיצה מנסה ברצף כמה custom URL schemes מועמדים (ראו
+// src/app/apps/page.tsx להסבר על מנגנון ה-fallback), ורק אם אף אחד מהם לא
+// הצליח (האפליקציה לא מותקנת, או שאף ניחוש לא נכון) עוברים לאתר.
+//
+// חשוב: אלו ניחושים בלבד, לא מתועדים רשמית ע"י Max/דיסקונט/Cal (חיפשתי
+// בחיפוש ברשת ולא מצאתי scheme מאומת ציבורית ל-Max) - אין Universal Link
+// רשמי כאן. אם המשתמש מגלה בפועל איזה scheme עובד (למשל ע"י הקלדה ידנית
+// בשורת הכתובת של הדפדפן בטלפון), אפשר לעדכן כאן את הרשימה.
 export type ExternalApp = {
   id: string;
   name: string;
   url: string;
-  scheme?: string;
+  schemes?: string[];
   color: string; // רקע לעיגול האייקון
 };
 
@@ -19,7 +22,8 @@ export const EXTERNAL_APPS: ExternalApp[] = [
     id: "max",
     name: "Max",
     url: "https://www.max.co.il",
-    scheme: "maxit://",
+    // ניחושים לפי שם החברה (Max IT Finance, לשעבר לאומי קארד) - לא מאומתים.
+    schemes: ["max://", "maxcard://", "maxitfinance://", "leumicard://", "maxit://"],
     color: "bg-slate-900",
   },
   {

@@ -4,30 +4,34 @@ import Link from "next/link";
 import { ArrowRight, ExternalLink } from "lucide-react";
 import { EXTERNAL_APPS, type ExternalApp } from "@/lib/externalApps";
 
-// מנסה לפתוח custom URL scheme של אפליקציה מותקנת (למשל "maxit://"); אם בתוך
-// זמן קצר הדפדפן לא "עזב" את העמוד (כלומר האפליקציה לא נפתחה - לרוב כי היא לא
-// מותקנת, או שה-scheme שגוי), נופלים חזרה לאתר הרשמי בטאב חדש. זה לא Universal
-// Link רשמי - רק ניסיון מיטבי, כי Max/דיסקונט/Cal לא חושפים API רשמי לכך.
-function openApp(app: ExternalApp) {
-  if (!app.scheme) {
-    window.open(app.url, "_blank", "noopener,noreferrer");
-    return;
+// מנסה לפתוח custom URL scheme אחד; מחזיר true אם נראה שהדפדפן "עזב" את העמוד
+// בתוך הזמן שניתן (כלומר כנראה שהאפליקציה נפתחה), false אם לא.
+function tryScheme(scheme: string, timeoutMs: number): Promise<boolean> {
+  return new Promise((resolve) => {
+    let appOpened = false;
+    const onVisibilityChange = () => {
+      if (document.hidden) appOpened = true;
+    };
+    document.addEventListener("visibilitychange", onVisibilityChange);
+
+    window.location.href = scheme;
+
+    setTimeout(() => {
+      document.removeEventListener("visibilitychange", onVisibilityChange);
+      resolve(appOpened);
+    }, timeoutMs);
+  });
+}
+
+// מנסה ברצף את כל ה-schemes המועמדים של האפליקציה (ראו הערת אזהרה ב-
+// src/lib/externalApps.ts - אלו ניחושים לא מאומתים); ברגע שאחד מהם "עובד"
+// (המשתמש עזב את העמוד) עוצרים. אם אף אחד לא עבד, נופלים חזרה לאתר הרשמי.
+async function openApp(app: ExternalApp) {
+  for (const scheme of app.schemes || []) {
+    const opened = await tryScheme(scheme, 700);
+    if (opened) return;
   }
-
-  let appOpened = false;
-  const onVisibilityChange = () => {
-    if (document.hidden) appOpened = true;
-  };
-  document.addEventListener("visibilitychange", onVisibilityChange);
-
-  window.location.href = app.scheme;
-
-  setTimeout(() => {
-    document.removeEventListener("visibilitychange", onVisibilityChange);
-    if (!appOpened) {
-      window.open(app.url, "_blank", "noopener,noreferrer");
-    }
-  }, 1200);
+  window.open(app.url, "_blank", "noopener,noreferrer");
 }
 
 export default function AppsPage() {
@@ -40,8 +44,8 @@ export default function AppsPage() {
       <div>
         <h1 className="text-xl font-bold">📱 האפליקציות שלי</h1>
         <p className="text-sm text-slate-500 mt-1">
-          לחיצה על אייקון מנסה לפתוח את האפליקציה המותקנת ישירות; אם זה לא מצליח (האפליקציה לא
-          מותקנת, או שהמנגנון לא נתמך בגרסה שלה), ייפתח האתר בדפדפן במקום.
+          לחיצה על אייקון מנסה לפתוח את האפליקציה המותקנת ישירות (ניחוש, לא מובטח); אם זה לא
+          מצליח תוך כמה שניות, ייפתח האתר בדפדפן במקום.
         </p>
       </div>
 
