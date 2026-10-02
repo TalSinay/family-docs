@@ -23,7 +23,7 @@ export async function POST(req: NextRequest) {
   const { session, workspaceId, error } = await requireWorkspace();
   if (error) return error;
 
-  const { title, dueDate } = await req.json();
+  const { title, dueDate, color } = await req.json();
   if (!title || !String(title).trim()) {
     return NextResponse.json({ error: "חסרה כותרת למשימה" }, { status: 400 });
   }
@@ -33,6 +33,7 @@ export async function POST(req: NextRequest) {
     workspaceId,
     title: String(title).trim(),
     dueDate: dueDate || undefined,
+    color: color || undefined,
     createdBy: session!.user.id,
   });
 

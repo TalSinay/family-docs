@@ -61,25 +61,25 @@ export function AppShell({ children }: { children: ReactNode }) {
                 <UserCircle size={18} className="shrink-0" />
                 <span className="truncate">שלום, {session.user.displayName || session.user.name}</span>
               </Link>
+              {/* כפתור הרענון זמין לכל המשתמשים (לא רק admin) - כדי לקבל את גרסת
+                  האפליקציה האחרונה בלי לחכות שה-PWA "יבחין" בעדכון בעצמו. */}
+              <button
+                onClick={() => window.location.reload()}
+                className="p-1.5 rounded-full hover:bg-slate-100 shrink-0"
+                aria-label="רענון האפליקציה"
+                title="רענון האפליקציה"
+              >
+                <RefreshCw size={16} />
+              </button>
               {session.user.isAdmin && (
-                <>
-                  <button
-                    onClick={() => window.location.reload()}
-                    className="p-1.5 rounded-full hover:bg-slate-100 shrink-0"
-                    aria-label="רענון האפליקציה"
-                    title="רענון האפליקציה"
-                  >
-                    <RefreshCw size={16} />
-                  </button>
-                  <Link
-                    href="/admin"
-                    className="p-1.5 rounded-full hover:bg-slate-100 shrink-0"
-                    aria-label="מעבר לאזור ניהול"
-                    title="אזור ניהול"
-                  >
-                    <ShieldCheck size={16} />
-                  </Link>
-                </>
+                <Link
+                  href="/admin"
+                  className="p-1.5 rounded-full hover:bg-slate-100 shrink-0"
+                  aria-label="מעבר לאזור ניהול"
+                  title="אזור ניהול"
+                >
+                  <ShieldCheck size={16} />
+                </Link>
               )}
               <button
                 onClick={() => signOut({ callbackUrl: "/login" })}

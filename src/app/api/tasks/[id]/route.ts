@@ -3,7 +3,7 @@ import { requireWorkspace } from "@/lib/requireWorkspace";
 import { connectToDatabase } from "@/lib/mongodb";
 import Task from "@/lib/models/Task";
 
-const ALLOWED_FIELDS = ["title", "dueDate", "isDone"];
+const ALLOWED_FIELDS = ["title", "dueDate", "isDone", "color"];
 
 export async function PATCH(
   req: NextRequest,

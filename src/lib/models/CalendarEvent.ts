@@ -10,6 +10,7 @@ export interface ICalendarEvent {
   title: string;
   date: string; // "YYYY-MM-DD"
   notes?: string;
+  color?: string; // hex, ראו src/lib/itemColors.ts - ריק = הצבע הקבוע הישן (טיל)
   createdBy: mongoose.Types.ObjectId;
   createdAt: Date;
 }
@@ -19,6 +20,7 @@ const CalendarEventSchema = new Schema<ICalendarEvent>({
   title: { type: String, required: true },
   date: { type: String, required: true },
   notes: { type: String },
+  color: { type: String },
   createdBy: { type: Schema.Types.ObjectId, ref: "User", required: true },
   createdAt: { type: Date, default: Date.now },
 });

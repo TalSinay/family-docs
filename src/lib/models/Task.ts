@@ -10,6 +10,7 @@ export interface ITask {
   title: string;
   dueDate?: string; // "YYYY-MM-DD", אופציונלי
   isDone: boolean;
+  color?: string; // hex, ראו src/lib/itemColors.ts - ריק = הצבע הקבוע הישן (סגול)
   createdBy: mongoose.Types.ObjectId;
   createdAt: Date;
 }
@@ -19,6 +20,7 @@ const TaskSchema = new Schema<ITask>({
   title: { type: String, required: true },
   dueDate: { type: String },
   isDone: { type: Boolean, default: false },
+  color: { type: String },
   createdBy: { type: Schema.Types.ObjectId, ref: "User", required: true },
   createdAt: { type: Date, default: Date.now },
 });

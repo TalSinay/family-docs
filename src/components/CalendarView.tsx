@@ -3,14 +3,16 @@
 import { useEffect, useMemo, useState, useCallback } from "react";
 import { useSession } from "next-auth/react";
 import Link from "next/link";
-import { ChevronRight, ChevronLeft, Plus, Trash2, ExternalLink } from "lucide-react";
+import { ChevronRight, ChevronLeft, Plus, Trash2, ExternalLink, Pencil, Check, X } from "lucide-react";
 import clsx from "clsx";
 
 import { HEBREW_MONTHS } from "@/lib/format";
+import { DEFAULT_EVENT_COLOR, DEFAULT_TASK_COLOR } from "@/lib/itemColors";
+import { ColorPicker } from "./ColorPicker";
 
 type Holiday = { date: string; title: string };
-type EventItem = { _id: string; title: string; date: string; notes?: string };
-type TaskItem = { _id: string; title: string; dueDate?: string; isDone: boolean };
+type EventItem = { _id: string; title: string; date: string; notes?: string; color?: string };
+type TaskItem = { _id: string; title: string; dueDate?: string; isDone: boolean; color?: string };
 type DocDue = { _id: string; title: string; dueDate?: string; dueDateTitle?: string };
 
 type CalItem = {
@@ -20,23 +22,18 @@ type CalItem = {
   id?: string;
   done?: boolean;
   notes?: string;
+  color?: string;
 };
 
 const WEEKDAYS = ["א", "ב", "ג", "ד", "ה", "ו", "ש"];
 
-// צבעים מלאים + טקסט לבן (כמו הצ'יפים בגוגל קלנדר) - קריא גם ברוחב תא מאוד צר
-const KIND_CHIP: Record<CalItem["kind"], string> = {
-  holiday: "bg-amber-500 text-white",
-  event: "bg-teal-600 text-white",
-  task: "bg-violet-600 text-white",
-  document: "bg-orange-500 text-white",
-};
-
-const KIND_ROW_STYLES: Record<CalItem["kind"], string> = {
-  holiday: "bg-amber-50 text-amber-800",
-  event: "bg-slate-50 text-slate-800",
-  task: "bg-violet-50 text-violet-800",
-  document: "bg-orange-50 text-orange-800",
+// צבע ברירת המחדל לכל סוג (כשלא נבחר צבע מותאם) - חגים ומסמכים לא ניתנים
+// להתאמה אישית, רק אירועים ומשימות (ראו src/lib/itemColors.ts).
+const DEFAULT_KIND_COLOR: Record<CalItem["kind"], string> = {
+  holiday: "#f59e0b", // amber-500
+  event: DEFAULT_EVENT_COLOR,
+  task: DEFAULT_TASK_COLOR,
+  document: "#f97316", // orange-500
 };
 
 function ymd(d: Date) {
@@ -70,6 +67,13 @@ export function CalendarView() {
   const [docDues, setDocDues] = useState<DocDue[]>([]);
   const [newEventTitle, setNewEventTitle] = useState("");
   const [newEventNotes, setNewEventNotes] = useState("");
+  const [newEventColor, setNewEventColor] = useState(DEFAULT_EVENT_COLOR);
+
+  // עריכת אירוע קיים (נפתח inline בתוך הרשימה, ראו renderItemRow)
+  const [editingEventId, setEditingEventId] = useState<string | null>(null);
+  const [editTitle, setEditTitle] = useState("");
+  const [editNotes, setEditNotes] = useState("");
+  const [editColor, setEditColor] = useState(DEFAULT_EVENT_COLOR);
 
   useEffect(() => {
     const now = new Date();
@@ -155,10 +159,24 @@ export function CalendarView() {
 
     for (const h of holidays) push(h.date, { key: `h-${h.date}-${h.title}`, kind: "holiday", title: h.title });
     for (const e of events)
-      push(e.date, { key: `e-${e._id}`, kind: "event", title: e.title, id: e._id, notes: e.notes });
+      push(e.date, {
+        key: `e-${e._id}`,
+        kind: "event",
+        title: e.title,
+        id: e._id,
+        notes: e.notes,
+        color: e.color,
+      });
     for (const t of tasks) {
       if (!t.dueDate) continue;
-      push(t.dueDate, { key: `t-${t._id}`, kind: "task", title: t.title, id: t._id, done: t.isDone });
+      push(t.dueDate, {
+        key: `t-${t._id}`,
+        kind: "task",
+        title: t.title,
+        id: t._id,
+        done: t.isDone,
+        color: t.color,
+      });
     }
     for (const d of docDues) {
       if (!d.dueDate) continue;
@@ -176,11 +194,17 @@ export function CalendarView() {
     const res = await fetch("/api/calendar-events", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ title: newEventTitle, date: selectedDay, notes: newEventNotes }),
+      body: JSON.stringify({
+        title: newEventTitle,
+        date: selectedDay,
+        notes: newEventNotes,
+        color: newEventColor,
+      }),
     });
     if (res.ok) {
       setNewEventTitle("");
       setNewEventNotes("");
+      setNewEventColor(DEFAULT_EVENT_COLOR);
       fetchEvents();
     }
   }
@@ -188,6 +212,31 @@ export function CalendarView() {
   async function deleteEvent(id: string) {
     const res = await fetch(`/api/calendar-events/${id}`, { method: "DELETE" });
     if (res.ok) fetchEvents();
+  }
+
+  function startEditEvent(item: CalItem) {
+    if (!item.id) return;
+    setEditingEventId(item.id);
+    setEditTitle(item.title);
+    setEditNotes(item.notes || "");
+    setEditColor(item.color || DEFAULT_EVENT_COLOR);
+  }
+
+  function cancelEditEvent() {
+    setEditingEventId(null);
+  }
+
+  async function saveEditEvent() {
+    if (!editingEventId || !editTitle.trim()) return;
+    const res = await fetch(`/api/calendar-events/${editingEventId}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ title: editTitle.trim(), notes: editNotes, color: editColor }),
+    });
+    if (res.ok) {
+      setEditingEventId(null);
+      fetchEvents();
+    }
   }
 
   const selectedDayLabel = selectedDay ? formatDayHeader(selectedDay) : "";
@@ -199,36 +248,80 @@ export function CalendarView() {
     );
   }
 
+  // רקע עדין + טקסט בצבע מלא (לרשימת הפירוט של היום, בניגוד לצ'יפים המלאים ברשת החודש)
+  function rowStyle(color: string) {
+    return { backgroundColor: `${color}1a`, color };
+  }
+
   function renderItemRow(item: CalItem) {
     if (item.kind === "holiday") {
       return (
-        <div key={item.key} className={clsx("rounded-xl px-3 py-2 text-sm", KIND_ROW_STYLES.holiday)} dir="auto">
+        <div key={item.key} className="rounded-xl px-3 py-2 text-sm" style={rowStyle(DEFAULT_KIND_COLOR.holiday)} dir="auto">
           🕎 {item.title}
         </div>
       );
     }
     if (item.kind === "event") {
+      const color = item.color || DEFAULT_KIND_COLOR.event;
+      if (editingEventId === item.id) {
+        return (
+          <div key={item.key} className="rounded-xl px-3 py-2 space-y-2 border border-slate-200">
+            <input
+              className="input"
+              value={editTitle}
+              onChange={(e) => setEditTitle(e.target.value)}
+              placeholder="כותרת"
+            />
+            <input
+              className="input"
+              value={editNotes}
+              onChange={(e) => setEditNotes(e.target.value)}
+              placeholder="הערות (אופציונלי)"
+            />
+            <ColorPicker value={editColor} onChange={setEditColor} />
+            <div className="flex gap-2">
+              <button onClick={saveEditEvent} className="btn-primary flex items-center gap-1 text-sm px-3 py-1.5">
+                <Check size={14} /> שמירה
+              </button>
+              <button
+                onClick={cancelEditEvent}
+                className="btn-secondary flex items-center gap-1 text-sm px-3 py-1.5"
+              >
+                <X size={14} /> ביטול
+              </button>
+            </div>
+          </div>
+        );
+      }
       return (
         <div
           key={item.key}
-          className={clsx("flex items-start justify-between gap-2 rounded-xl px-3 py-2", KIND_ROW_STYLES.event)}
+          className="flex items-start justify-between gap-2 rounded-xl px-3 py-2"
+          style={rowStyle(color)}
         >
           <div dir="auto">
             <p className="font-medium text-sm">{item.title}</p>
-            {item.notes && <p className="text-xs text-slate-500">{item.notes}</p>}
+            {item.notes && <p className="text-xs opacity-80">{item.notes}</p>}
           </div>
-          <button onClick={() => item.id && deleteEvent(item.id)} className="text-slate-400 hover:text-red-600 shrink-0">
-            <Trash2 size={16} />
-          </button>
+          <div className="flex items-center gap-1 shrink-0">
+            <button onClick={() => startEditEvent(item)} className="opacity-60 hover:opacity-100">
+              <Pencil size={16} />
+            </button>
+            <button onClick={() => item.id && deleteEvent(item.id)} className="opacity-60 hover:opacity-100 hover:text-red-600">
+              <Trash2 size={16} />
+            </button>
+          </div>
         </div>
       );
     }
     if (item.kind === "task") {
+      const color = item.color || DEFAULT_KIND_COLOR.task;
       return (
         <Link
           key={item.key}
           href="/tasks"
-          className={clsx("flex items-center gap-2 rounded-xl px-3 py-2 text-sm hover:bg-violet-100 transition-colors", KIND_ROW_STYLES.task)}
+          className="flex items-center gap-2 rounded-xl px-3 py-2 text-sm transition-opacity hover:opacity-80"
+          style={rowStyle(color)}
           dir="auto"
         >
           <span className={clsx(item.done && "line-through opacity-60")}>✅ {item.title}</span>
@@ -239,7 +332,8 @@ export function CalendarView() {
       <Link
         key={item.key}
         href={`/documents/${item.id}`}
-        className={clsx("flex items-center justify-between gap-2 rounded-xl px-3 py-2 text-sm hover:bg-orange-100 transition-colors", KIND_ROW_STYLES.document)}
+        className="flex items-center justify-between gap-2 rounded-xl px-3 py-2 text-sm transition-opacity hover:opacity-80"
+        style={rowStyle(DEFAULT_KIND_COLOR.document)}
         dir="auto"
       >
         <span>📌 {item.title}</span>
@@ -309,10 +403,10 @@ export function CalendarView() {
                     key={item.key}
                     dir="auto"
                     className={clsx(
-                      "text-[9.5px] sm:text-[10.5px] leading-tight rounded-[3px] px-1 py-[1.5px] truncate w-full",
-                      KIND_CHIP[item.kind],
+                      "text-[9.5px] sm:text-[10.5px] leading-tight rounded-[3px] px-1 py-[1.5px] truncate w-full text-white",
                       item.kind === "task" && item.done && "opacity-50 line-through"
                     )}
+                    style={{ backgroundColor: item.color || DEFAULT_KIND_COLOR[item.kind] }}
                   >
                     {item.title}
                   </span>
@@ -365,6 +459,7 @@ export function CalendarView() {
                 value={newEventNotes}
                 onChange={(e) => setNewEventNotes(e.target.value)}
               />
+              <ColorPicker value={newEventColor} onChange={setNewEventColor} />
               <button onClick={addEvent} className="btn-primary w-full flex items-center justify-center gap-2">
                 <Plus size={16} /> הוסף אירוע
               </button>
