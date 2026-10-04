@@ -10,11 +10,20 @@ import {
   Plus,
   Trash2,
   Save,
+  Upload,
+  FileText,
 } from "lucide-react";
-import { formatDateTime, formatCurrency } from "@/lib/format";
+import { formatDateTime, formatCurrency, formatFileSize } from "@/lib/format";
 import { FINANCIAL_CATEGORIES } from "@/lib/categories";
 
 type CustomField = { key: string; value: string };
+
+type Attachment = {
+  fileId: string;
+  fileName: string;
+  fileMimeType: string;
+  fileSize: number;
+};
 
 type DocData = {
   _id: string;
@@ -30,13 +39,18 @@ type DocData = {
   monthlyAmount?: number;
   dueDate?: string;
   dueDateTitle?: string;
+  attachments?: Attachment[];
+  // קובץ בודד ישן (מסמכים שנוצרו לפני תמיכה ב-attachments) - לתאימות לאחור בלבד
   fileId?: string;
   fileName?: string;
   fileMimeType?: string;
+  fileSize?: number;
   uploadedBy?: { name?: string } | null;
   uploadedAt: string;
   lastOpenedAt: string;
 };
+
+const MAX_FILE_SIZE = 11 * 1024 * 1024;
 
 export function DocumentDetail({ doc: initialDoc }: { doc: DocData }) {
   const router = useRouter();
@@ -51,8 +65,27 @@ export function DocumentDetail({ doc: initialDoc }: { doc: DocData }) {
   const [dueDateTitle, setDueDateTitle] = useState(initialDoc.dueDateTitle || "");
   const [saving, setSaving] = useState(false);
   const [savedMsg, setSavedMsg] = useState("");
+  const [uploadingFiles, setUploadingFiles] = useState(false);
+  const [attachError, setAttachError] = useState("");
 
   const isFinancial = FINANCIAL_CATEGORIES.includes(doc.category as (typeof FINANCIAL_CATEGORIES)[number]);
+
+  // מסמכים חדשים נשמרים כולם ב-attachments; מסמכים ישנים (מלפני התמיכה בכמה
+  // קבצים) מוצגים כאן כ"attachment" בודד לתאימות לאחור, עד שיוחלפו/יימחקו.
+  const attachments: Attachment[] =
+    doc.attachments && doc.attachments.length > 0
+      ? doc.attachments
+      : doc.fileId
+      ? [
+          {
+            fileId: doc.fileId,
+            fileName: doc.fileName || "קובץ מצורף",
+            fileMimeType: doc.fileMimeType || "application/octet-stream",
+            fileSize: doc.fileSize || 0,
+          },
+        ]
+      : [];
+  const isLegacySingleFile = !doc.attachments?.length && !!doc.fileId;
 
   async function patch(update: Record<string, unknown>) {
     const res = await fetch(`/api/documents/${doc._id}`, {
@@ -71,6 +104,47 @@ export function DocumentDetail({ doc: initialDoc }: { doc: DocData }) {
     const next = !doc.isImportant;
     setDoc((prev) => ({ ...prev, isImportant: next }));
     await patch({ isImportant: next });
+  }
+
+  async function addFiles(selected: FileList | null) {
+    if (!selected || selected.length === 0) return;
+    setAttachError("");
+    const incoming = Array.from(selected);
+    const tooBig = incoming.find((f) => f.size > MAX_FILE_SIZE);
+    if (tooBig) {
+      setAttachError(`הקובץ "${tooBig.name}" גדול מדי (מקסימום כ-11MB לקובץ)`);
+      return;
+    }
+
+    setUploadingFiles(true);
+    try {
+      const newAttachments: Attachment[] = [];
+      for (const f of incoming) {
+        const formData = new FormData();
+        formData.append("file", f);
+        const res = await fetch("/api/files/upload", { method: "POST", body: formData });
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.error || `העלאת הקובץ "${f.name}" נכשלה`);
+        newAttachments.push(data);
+      }
+      const combined = [...attachments, ...newAttachments];
+      const ok = await patch(
+        isLegacySingleFile ? { attachments: combined, fileId: null } : { attachments: combined }
+      );
+      if (!ok) setAttachError("שגיאה בשמירת הקבצים");
+    } catch (err) {
+      setAttachError(err instanceof Error ? err.message : "שגיאה לא צפויה");
+    } finally {
+      setUploadingFiles(false);
+    }
+  }
+
+  async function removeAttachment(fileId: string) {
+    if (!confirm("להסיר את הקובץ הזה מהרשומה?")) return;
+    const remaining = attachments.filter((a) => a.fileId !== fileId);
+    await patch(
+      isLegacySingleFile ? { attachments: remaining, fileId: null } : { attachments: remaining }
+    );
   }
 
   async function handleSave() {
@@ -152,18 +226,8 @@ export function DocumentDetail({ doc: initialDoc }: { doc: DocData }) {
           </div>
         )}
 
-        <div className="flex gap-2 mt-4">
-          {doc.fileId && (
-            <a
-              href={`/api/files/${doc.fileId}`}
-              target="_blank"
-              rel="noreferrer"
-              className="btn-primary flex items-center gap-2"
-            >
-              <Download size={16} /> צפייה / הורדה
-            </a>
-          )}
-          {doc.externalLink && (
+        {doc.externalLink && (
+          <div className="flex gap-2 mt-4">
             <a
               href={doc.externalLink}
               target="_blank"
@@ -172,8 +236,64 @@ export function DocumentDetail({ doc: initialDoc }: { doc: DocData }) {
             >
               <ExternalLinkIcon size={16} /> קישור לפלטפורמה
             </a>
-          )}
-        </div>
+          </div>
+        )}
+      </div>
+
+      <div className="card p-5">
+        <label className="label">קבצים מצורפים</label>
+
+        {attachments.length === 0 && (
+          <p className="text-sm text-slate-400 mb-2">אין קבצים מצורפים עדיין.</p>
+        )}
+
+        {attachments.length > 0 && (
+          <div className="space-y-1.5 mb-3">
+            {attachments.map((a) => (
+              <div key={a.fileId} className="flex items-center gap-2 bg-slate-50 rounded-lg px-3 py-2">
+                <FileText size={16} className="text-slate-400 shrink-0" />
+                <a
+                  href={`/api/files/${a.fileId}`}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="text-sm text-teal-700 hover:underline truncate flex-1 flex items-center gap-1"
+                >
+                  <Download size={14} className="shrink-0" /> {a.fileName}
+                </a>
+                {a.fileSize > 0 && (
+                  <span className="text-xs text-slate-400 shrink-0">{formatFileSize(a.fileSize)}</span>
+                )}
+                <button
+                  type="button"
+                  onClick={() => removeAttachment(a.fileId)}
+                  className="shrink-0 text-slate-400 hover:text-red-600"
+                  aria-label="הסר קובץ"
+                >
+                  <Trash2 size={16} />
+                </button>
+              </div>
+            ))}
+          </div>
+        )}
+
+        {attachError && <p className="text-sm text-red-600 mb-2">{attachError}</p>}
+
+        <label className="flex items-center gap-2 justify-center border-2 border-dashed border-slate-300 rounded-xl py-4 cursor-pointer hover:border-teal-500 transition-colors">
+          <Upload size={18} className="text-slate-400" />
+          <span className="text-sm text-slate-600">
+            {uploadingFiles ? "מעלה..." : "הוסף קובץ (אפשר לבחור כמה בבת אחת)"}
+          </span>
+          <input
+            type="file"
+            multiple
+            disabled={uploadingFiles}
+            className="hidden"
+            onChange={(e) => {
+              addFiles(e.target.files);
+              e.target.value = "";
+            }}
+          />
+        </label>
       </div>
 
       <div className="card p-5">

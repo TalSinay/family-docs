@@ -7,7 +7,7 @@ import FileModel from "@/lib/models/File";
 const MAX_FILE_SIZE = 11 * 1024 * 1024; // 11MB
 
 export async function POST(req: NextRequest) {
-  const { error } = await requireWorkspace();
+  const { workspaceId, error } = await requireWorkspace();
   if (error) return error;
 
   const formData = await req.formData();
@@ -29,6 +29,7 @@ export async function POST(req: NextRequest) {
   const buffer = Buffer.from(arrayBuffer);
 
   const saved = await FileModel.create({
+    workspaceId,
     filename: file.name,
     mimeType: file.type || "application/octet-stream",
     size: file.size,

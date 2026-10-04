@@ -2,10 +2,14 @@
 
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
-import { Plus, Trash2, Upload } from "lucide-react";
+import { Plus, Trash2, Upload, FileText } from "lucide-react";
 import { FINANCIAL_CATEGORIES, MAIN_CATEGORIES, MainCategory } from "@/lib/categories";
+import { formatFileSize } from "@/lib/format";
 
 type CustomField = { key: string; value: string };
+
+// מגבלה מעשית לכל קובץ בודד - תואמת את ה-11MB שבצד השרת (api/files/upload).
+const MAX_FILE_SIZE = 11 * 1024 * 1024;
 
 export function UploadForm({
   initialCategory,
@@ -28,7 +32,7 @@ export function UploadForm({
   const [dueDate, setDueDate] = useState("");
   const [dueDateTitle, setDueDateTitle] = useState("");
   const [customFields, setCustomFields] = useState<CustomField[]>([]);
-  const [file, setFile] = useState<File | null>(null);
+  const [files, setFiles] = useState<File[]>([]);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState("");
 
@@ -54,6 +58,22 @@ export function UploadForm({
     setCustomFields((prev) => prev.filter((_, idx) => idx !== i));
   }
 
+  // מוסיף קבצים לרשימה הקיימת (ולא מחליף אותה) - כך אפשר לבחור קבצים בכמה
+  // פעימות ("הוסף עוד קובץ") ולצרף כולם לאותה רשומה.
+  function addFiles(selected: FileList | null) {
+    if (!selected || selected.length === 0) return;
+    const incoming = Array.from(selected);
+    const tooBig = incoming.filter((f) => f.size > MAX_FILE_SIZE);
+    if (tooBig.length > 0) {
+      setError(`הקובץ "${tooBig[0].name}" גדול מדי (מקסימום כ-11MB לקובץ)`);
+    }
+    setFiles((prev) => [...prev, ...incoming.filter((f) => f.size <= MAX_FILE_SIZE)]);
+  }
+
+  function removeFile(index: number) {
+    setFiles((prev) => prev.filter((_, i) => i !== index));
+  }
+
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     setError("");
@@ -65,15 +85,18 @@ export function UploadForm({
 
     setSubmitting(true);
     try {
-      let fileId, fileName, fileMimeType, fileSize;
-
-      if (file) {
+      // מעלים את הקבצים אחד-אחד (סדרתית, לא במקביל) כדי לא להציף את השרת
+      // ולהציג בבירור איזה קובץ נכשל אם משהו משתבש.
+      const attachments: { fileId: string; fileName: string; fileMimeType: string; fileSize: number }[] = [];
+      for (const f of files) {
         const formData = new FormData();
-        formData.append("file", file);
+        formData.append("file", f);
         const uploadRes = await fetch("/api/files/upload", { method: "POST", body: formData });
         const uploadData = await uploadRes.json();
-        if (!uploadRes.ok) throw new Error(uploadData.error || "העלאת הקובץ נכשלה");
-        ({ fileId, fileName, fileMimeType, fileSize } = uploadData);
+        if (!uploadRes.ok) {
+          throw new Error(uploadData.error || `העלאת הקובץ "${f.name}" נכשלה`);
+        }
+        attachments.push(uploadData);
       }
 
       const finalSubcategory = newSubcategory.trim() || subcategory || undefined;
@@ -93,10 +116,7 @@ export function UploadForm({
           amount: amount ? Number(amount) : undefined,
           isMonthlyPayment,
           monthlyAmount: isMonthlyPayment && monthlyAmount ? Number(monthlyAmount) : undefined,
-          fileId,
-          fileName,
-          fileMimeType,
-          fileSize,
+          attachments,
         }),
       });
 
@@ -291,16 +311,41 @@ export function UploadForm({
       </div>
 
       <div>
-        <label className="label">קובץ מצורף</label>
+        <label className="label">קבצים מצורפים</label>
+
+        {files.length > 0 && (
+          <div className="space-y-1.5 mb-2">
+            {files.map((f, i) => (
+              <div key={i} className="flex items-center gap-2 bg-slate-50 rounded-lg px-3 py-2">
+                <FileText size={16} className="text-slate-400 shrink-0" />
+                <span className="text-sm text-slate-700 truncate flex-1">{f.name}</span>
+                <span className="text-xs text-slate-400 shrink-0">{formatFileSize(f.size)}</span>
+                <button
+                  type="button"
+                  onClick={() => removeFile(i)}
+                  className="shrink-0 text-slate-400 hover:text-red-600"
+                  aria-label="הסר קובץ"
+                >
+                  <Trash2 size={16} />
+                </button>
+              </div>
+            ))}
+          </div>
+        )}
+
         <label className="flex items-center gap-2 justify-center border-2 border-dashed border-slate-300 rounded-xl py-6 cursor-pointer hover:border-teal-500 transition-colors">
           <Upload size={20} className="text-slate-400" />
           <span className="text-sm text-slate-600">
-            {file ? file.name : "לחץ לבחירת קובץ (עד 11MB)"}
+            {files.length > 0 ? "הוסף עוד קובץ" : "לחץ לבחירת קובץ אחד או יותר (עד 11MB לקובץ)"}
           </span>
           <input
             type="file"
+            multiple
             className="hidden"
-            onChange={(e) => setFile(e.target.files?.[0] || null)}
+            onChange={(e) => {
+              addFiles(e.target.files);
+              e.target.value = "";
+            }}
           />
         </label>
       </div>

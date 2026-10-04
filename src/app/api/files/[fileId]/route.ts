@@ -19,9 +19,15 @@ export async function GET(
 
   await connectToDatabase();
 
-  // שלב האימות: קובץ מוגש רק אם יש רשומת Document שמצביעה עליו, וששייכת
-  // ל-workspace הפעיל של המשתמש - כך אי אפשר לגשת לקובץ ששייך ל-workspace אחר.
-  const linkedDoc = await DocumentModel.findOne({ fileId, workspaceId }).select("_id").lean();
+  // שלב האימות: קובץ מוגש רק אם יש רשומת Document שמצביעה עליו (כקובץ הבודד הישן
+  // או כאחד מה-attachments), וששייכת ל-workspace הפעיל של המשתמש - כך אי אפשר
+  // לגשת לקובץ ששייך ל-workspace אחר.
+  const linkedDoc = await DocumentModel.findOne({
+    workspaceId,
+    $or: [{ fileId }, { "attachments.fileId": fileId }],
+  })
+    .select("_id")
+    .lean();
   if (!linkedDoc) {
     return NextResponse.json({ error: "הקובץ לא נמצא" }, { status: 404 });
   }

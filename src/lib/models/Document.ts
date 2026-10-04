@@ -10,6 +10,13 @@ export interface ICustomField {
   value: string;
 }
 
+export interface IAttachment {
+  fileId: mongoose.Types.ObjectId;
+  fileName: string;
+  fileMimeType: string;
+  fileSize: number;
+}
+
 export interface IDocument {
   _id: mongoose.Types.ObjectId;
   workspaceId: mongoose.Types.ObjectId;
@@ -32,10 +39,13 @@ export interface IDocument {
   generatedForMonths: string[]; // "YYYY-MM"
   generatedFromDocId?: mongoose.Types.ObjectId; // אם זו רשומת הוצאה שנוצרה אוטומטית
 
+  // שדות הקובץ הבודד (fileId/fileName/...) נשארים כאן למסמכים ישנים בלבד -
+  // מסמכים חדשים נשמרים כולם ב-attachments (מערך), גם כשיש קובץ אחד בלבד.
   fileId?: mongoose.Types.ObjectId;
   fileName?: string;
   fileMimeType?: string;
   fileSize?: number;
+  attachments: IAttachment[];
 
   uploadedBy: mongoose.Types.ObjectId;
   uploadedAt: Date;
@@ -44,6 +54,16 @@ export interface IDocument {
 
 const CustomFieldSchema = new Schema<ICustomField>(
   { key: { type: String, required: true }, value: { type: String, required: true } },
+  { _id: false }
+);
+
+const AttachmentSchema = new Schema<IAttachment>(
+  {
+    fileId: { type: Schema.Types.ObjectId, ref: "File", required: true },
+    fileName: { type: String, required: true },
+    fileMimeType: { type: String, required: true },
+    fileSize: { type: Number, required: true },
+  },
   { _id: false }
 );
 
@@ -70,6 +90,7 @@ const DocumentSchema = new Schema<IDocument>({
   fileName: { type: String },
   fileMimeType: { type: String },
   fileSize: { type: Number },
+  attachments: { type: [AttachmentSchema], default: [] },
 
   uploadedBy: { type: Schema.Types.ObjectId, ref: "User", required: true },
   uploadedAt: { type: Date, default: Date.now },

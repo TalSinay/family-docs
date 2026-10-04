@@ -3,6 +3,7 @@ import { requireWorkspace } from "@/lib/requireWorkspace";
 import { connectToDatabase } from "@/lib/mongodb";
 import DocumentModel from "@/lib/models/Document";
 import { overlayUploaderDisplayNames } from "@/lib/resolveDisplayNames";
+import { sanitizeAttachments } from "@/lib/attachments";
 
 export async function GET(
   req: NextRequest,
@@ -49,6 +50,8 @@ export async function PATCH(
     "subcategory",
     "dueDate",
     "dueDateTitle",
+    "attachments",
+    "fileId", // כדי לאפשר ניקוי קובץ הישן-הבודד (מסמכים שנוצרו לפני תמיכה ב-attachments)
   ];
   const update: Record<string, unknown> = {};
   for (const key of allowedFields) {
@@ -58,6 +61,17 @@ export async function PATCH(
   if (update.dueDate === "") update.dueDate = null;
 
   await connectToDatabase();
+
+  // כמו ב-POST: מסננים attachments לכאלה שהועלו בפועל ב-workspace הפעיל, כדי
+  // שלא ניתן יהיה "לקשר" קובץ שהועלה ב-workspace אחר למסמך קיים.
+  if ("attachments" in update) {
+    update.attachments = await sanitizeAttachments(update.attachments, workspaceId);
+  }
+  // fileId (הקובץ הבודד הישן) ניתן לניקוי בלבד מהנתיב הזה - לא לקביעה לערך חדש,
+  // כדי שלא ניתן יהיה "לקשר" קובץ זר דרך השדה הישן הזה.
+  if ("fileId" in update && update.fileId) {
+    delete update.fileId;
+  }
   const doc = await DocumentModel.findOneAndUpdate({ _id: id, workspaceId }, update, {
     new: true,
   });

@@ -4,6 +4,7 @@ import { connectToDatabase } from "@/lib/mongodb";
 import DocumentModel from "@/lib/models/Document";
 import SubCategory from "@/lib/models/SubCategory";
 import { overlayUploaderDisplayNames } from "@/lib/resolveDisplayNames";
+import { sanitizeAttachments } from "@/lib/attachments";
 
 export async function GET(req: NextRequest) {
   const { workspaceId, error } = await requireWorkspace();
@@ -52,10 +53,7 @@ export async function POST(req: NextRequest) {
     amount,
     isMonthlyPayment,
     monthlyAmount,
-    fileId,
-    fileName,
-    fileMimeType,
-    fileSize,
+    attachments,
   } = body;
 
   if (!title || !category) {
@@ -63,6 +61,9 @@ export async function POST(req: NextRequest) {
   }
 
   await connectToDatabase();
+
+  // מסננים לרשומות attachments תקינות בלבד שהועלו בפועל ב-workspace הפעיל
+  const validAttachments = await sanitizeAttachments(attachments, workspaceId);
 
   // אם תת-הקטגוריה חדשה - שומרים אותה לרשימה כדי שתופיע גם בעתיד
   if (subcategory) {
@@ -86,10 +87,7 @@ export async function POST(req: NextRequest) {
     amount: amount ?? undefined,
     isMonthlyPayment: !!isMonthlyPayment,
     monthlyAmount: isMonthlyPayment ? monthlyAmount : undefined,
-    fileId: fileId || undefined,
-    fileName: fileName || undefined,
-    fileMimeType: fileMimeType || undefined,
-    fileSize: fileSize || undefined,
+    attachments: validAttachments,
     uploadedBy: session!.user.id,
   });
 
