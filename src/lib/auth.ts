@@ -7,6 +7,12 @@ import WorkspaceMembership from "@/lib/models/WorkspaceMembership";
 
 export type WorkspaceClaim = { id: string; name: string; displayName: string };
 
+// הרשאת admin בפועל (isAdmin) בתוקף 48 שעות בלבד מרגע אימות ה-OTP ב-/admin/login,
+// בנפרד מה-session הרגיל של האפליקציה (שנשאר מחובר הרבה יותר זמן, כברירת המחדל
+// של NextAuth). אחרי 48 שעות, המשתמש חוזר וצריך לעבור את זרימת ה-2FA מחדש כדי
+// לגשת לאזור הניהול, גם אם הוא עדיין מחובר כרגיל לאפליקציה.
+const ADMIN_SESSION_MAX_AGE_MS = 48 * 60 * 60 * 1000;
+
 // טוען את רשימת ה-workspace-ים שהמשתמש חבר בהם, כולל שם ה-workspace ושם התצוגה
 // (displayName) של המשתמש בתוכו - נקרא רק בזמן sign-in / עדכון session, אף פעם
 // לא ב-middleware (edge runtime לא תומך בחיבור mongoose).
@@ -110,13 +116,19 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
     }),
   ],
   callbacks: {
-    async jwt({ token, user, trigger, session }) {
+    async jwt({ token, user, account, trigger, session }) {
       if (user) {
         const u = user as { id: string; name?: string | null; role?: string };
         token.id = u.id;
         token.name = u.name;
         token.role = u.role ?? "member";
-        token.isAdmin = u.role === "admin";
+        // רק כניסה בפועל דרך admin-credentials (אימייל+סיסמה+קוד OTP) מאשרת
+        // הרשאת admin - כניסה רגילה של משתמש עם role=admin לא מספיקה, כדי שלא
+        // ניתן יהיה לגשת לאזור הניהול בלי לעבור את זרימת ה-2FA (ראו גם
+        // ADMIN_SESSION_MAX_AGE_MS בהמשך הקובץ).
+        if (account?.provider === "admin-credentials") {
+          token.adminVerifiedAt = Date.now();
+        }
         const claims = await loadWorkspaceClaims(u.id, u.name || "");
         token.workspaces = claims;
         if (!token.activeWorkspaceId || !claims.some((c) => c.id === token.activeWorkspaceId)) {
@@ -144,6 +156,14 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
           token.activeWorkspaceId = claims[0]?.id;
         }
       }
+
+      // מחושב בכל קריאה (לא רק בכניסה) - כך שתוקף הרשאת ה-admin פוקע אוטומטית
+      // 48 שעות אחרי אימות ה-OTP, בלי צורך בהתנתקות מלאה מהאפליקציה.
+      const adminVerifiedAt = token.adminVerifiedAt;
+      const adminWindowValid =
+        typeof adminVerifiedAt === "number" && Date.now() - adminVerifiedAt < ADMIN_SESSION_MAX_AGE_MS;
+      token.isAdmin = token.role === "admin" && adminWindowValid;
+      if (!adminWindowValid) token.adminVerifiedAt = undefined;
 
       return token;
     },
