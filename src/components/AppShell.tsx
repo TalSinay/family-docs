@@ -4,7 +4,7 @@ import { usePathname } from "next/navigation";
 import { useSession, signOut } from "next-auth/react";
 import { ReactNode, useEffect, useRef } from "react";
 import Link from "next/link";
-import { LogOut, RefreshCw, ShieldCheck, UserCircle } from "lucide-react";
+import { LogOut, RefreshCw, Search, ShieldCheck, UserCircle } from "lucide-react";
 import { BottomNav } from "./BottomNav";
 import { UploadButton } from "./UploadButton";
 import { WorkspaceSwitcher } from "./WorkspaceSwitcher";
@@ -52,6 +52,14 @@ export function AppShell({ children }: { children: ReactNode }) {
                   activeWorkspaceId={session.user.activeWorkspaceId}
                 />
               )}
+              <Link
+                href="/search"
+                className="p-1.5 rounded-full hover:bg-slate-100 shrink-0"
+                aria-label="חיפוש"
+                title="חיפוש"
+              >
+                <Search size={16} />
+              </Link>
               <Link
                 href="/profile"
                 className="flex items-center gap-1.5 truncate hover:text-teal-700"
