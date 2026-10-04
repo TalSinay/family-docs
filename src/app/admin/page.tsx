@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
-import { Plus, Users, Building2, Trash2 } from "lucide-react";
+import { Plus, Users, Building2, Trash2, Download } from "lucide-react";
 
 type WorkspaceRow = { _id: string; name: string; memberCount: number };
 type UserRow = { _id: string; name: string; email: string; role: "admin" | "member" };
@@ -84,6 +84,19 @@ export default function AdminDashboard() {
   return (
     <div className="space-y-6">
       {error && <div className="bg-red-50 text-red-700 text-sm rounded-xl px-3 py-2">{error}</div>}
+
+      <section className="card p-5">
+        <h2 className="font-bold text-lg flex items-center gap-2 mb-2">
+          <Download size={18} /> גיבוי נתונים
+        </h2>
+        <p className="text-sm text-slate-500 mb-3">
+          הורדת קובץ ZIP עם כל הנתונים (כל ה-workspace-ים: מסמכים, קבצים, יומן, משימות,
+          רשימות קניות ועוד) - לגיבוי/שמירה מקומית. לא כולל סיסמאות.
+        </p>
+        <a href="/api/admin/backup" className="btn-primary inline-flex items-center gap-2">
+          <Download size={16} /> הורדת גיבוי מלא (ZIP)
+        </a>
+      </section>
 
       <section className="card p-5">
         <h2 className="font-bold text-lg flex items-center gap-2 mb-3">
