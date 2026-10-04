@@ -3,6 +3,7 @@
 import { useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import Papa from "papaparse";
+import { readSheet } from "read-excel-file/browser";
 import { ArrowRight, Upload, CheckCircle2 } from "lucide-react";
 
 type Row = Record<string, string>;
@@ -73,29 +74,75 @@ export default function ImportPage() {
   );
   const [submitError, setSubmitError] = useState("");
 
+  // המרת תא גולמי שמוחזר מ-read-excel-file (מספר / Date / מחרוזת / null) למחרוזת אחידה,
+  // כדי שהמשך העיבוד (guessColumn, parseDate, parseAmount) יוכל להתייחס לכל השורות
+  // כ-Row (Record<string,string>) בלי קשר למקור (CSV או Excel).
+  function cellToString(cell: unknown): string {
+    if (cell == null) return "";
+    if (cell instanceof Date) {
+      // בניה "ידנית" מרכיבי התאריך המקומיים (לא toISOString) כדי למנוע היסט יום מ-UTC.
+      const y = cell.getFullYear();
+      const mo = String(cell.getMonth() + 1).padStart(2, "0");
+      const d = String(cell.getDate()).padStart(2, "0");
+      return `${y}-${mo}-${d}`;
+    }
+    return String(cell);
+  }
+
+  function applyParsedRows(cols: string[], data: Row[]) {
+    if (cols.length === 0 || data.length === 0) {
+      setParseError("לא הצלחתי לקרוא שורות מהקובץ - ודא שיש בו שורת כותרות ולפחות שורת מידע אחת.");
+      setHeaders([]);
+      setRows([]);
+      return;
+    }
+    setHeaders(cols);
+    setRows(data);
+    setDateCol(guessColumn(cols, DATE_HINTS));
+    setTitleCol(guessColumn(cols, TITLE_HINTS));
+    setAmountCol(guessColumn(cols, AMOUNT_HINTS));
+  }
+
   async function handleFile(file: File) {
     setParseError("");
     setResult(null);
     setFileName(file.name);
+
+    const isExcel =
+      file.name.toLowerCase().endsWith(".xlsx") ||
+      file.type === "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet";
+
+    if (isExcel) {
+      try {
+        const sheetRows = await readSheet(file);
+        const [headerRow, ...dataRows] = sheetRows;
+        if (!headerRow) {
+          setParseError("לא הצלחתי לקרוא שורות מהקובץ - ודא שיש בו שורת כותרות ולפחות שורת מידע אחת.");
+          setHeaders([]);
+          setRows([]);
+          return;
+        }
+        const cols = headerRow.map((c) => cellToString(c));
+        const data: Row[] = dataRows.map((r) => {
+          const row: Row = {};
+          cols.forEach((col, i) => {
+            row[col] = cellToString(r[i]);
+          });
+          return row;
+        });
+        applyParsedRows(cols, data);
+      } catch {
+        setParseError("שגיאה בקריאת קובץ ה-Excel. ודא שזה קובץ .xlsx תקין.");
+      }
+      return;
+    }
+
     const buffer = await file.arrayBuffer();
     const text = new TextDecoder(encoding).decode(buffer);
     Papa.parse<Row>(text, {
       header: true,
       skipEmptyLines: true,
-      complete: (res) => {
-        const cols = res.meta.fields || [];
-        if (cols.length === 0 || res.data.length === 0) {
-          setParseError("לא הצלחתי לקרוא שורות מהקובץ - ודא שזה קובץ CSV עם שורת כותרות.");
-          setHeaders([]);
-          setRows([]);
-          return;
-        }
-        setHeaders(cols);
-        setRows(res.data);
-        setDateCol(guessColumn(cols, DATE_HINTS));
-        setTitleCol(guessColumn(cols, TITLE_HINTS));
-        setAmountCol(guessColumn(cols, AMOUNT_HINTS));
-      },
+      complete: (res) => applyParsedRows(res.meta.fields || [], res.data),
       error: () => setParseError("שגיאה בקריאת הקובץ."),
     });
   }
@@ -150,14 +197,14 @@ export default function ImportPage() {
       <div>
         <h1 className="text-xl font-bold">📥 ייבוא הוצאות מקובץ (למשל Max)</h1>
         <p className="text-sm text-slate-500 mt-1">
-          הורד מאתר/אפליקציית Max (או כל חברת אשראי אחרת) קובץ היסטוריית עסקאות. אם קיבלת קובץ
-          Excel (.xlsx), פתח אותו ב-Excel או ב-Google Sheets ושמור/ייצא כקובץ CSV לפני ההעלאה כאן.
+          הורד מאתר/אפליקציית Max (או כל חברת אשראי אחרת) קובץ היסטוריית עסקאות, בפורמט CSV או
+          Excel (.xlsx), והעלה אותו כאן ישירות - אין צורך בהמרה בין הפורמטים.
         </p>
       </div>
 
       <section className="card p-5 space-y-4">
         <div>
-          <label className="label">קידוד הקובץ</label>
+          <label className="label">קידוד הקובץ (רק לקבצי CSV)</label>
           <select
             className="input"
             value={encoding}
@@ -166,14 +213,15 @@ export default function ImportPage() {
             <option value="utf-8">UTF-8 (ברירת מחדל)</option>
             <option value="windows-1255">Windows-1255 (עברית ישנה) - אם הטקסט מוצג כג׳יבריש</option>
           </select>
+          <p className="text-xs text-slate-400 mt-1">לא רלוונטי לקבצי Excel (.xlsx) - הקידוד מזוהה מהקובץ אוטומטית.</p>
         </div>
 
         <div>
-          <label className="label">קובץ CSV</label>
+          <label className="label">קובץ CSV או Excel</label>
           <input
             ref={fileInputRef}
             type="file"
-            accept=".csv,text/csv"
+            accept=".csv,text/csv,.xlsx,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
             className="input"
             onChange={(e) => {
               const f = e.target.files?.[0];
