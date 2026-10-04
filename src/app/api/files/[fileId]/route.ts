@@ -19,21 +19,20 @@ export async function GET(
 
   await connectToDatabase();
 
-  // שלב האימות: קובץ מוגש רק אם יש רשומת Document שמצביעה עליו (כקובץ הבודד הישן
-  // או כאחד מה-attachments), וששייכת ל-workspace הפעיל של המשתמש - כך אי אפשר
-  // לגשת לקובץ ששייך ל-workspace אחר.
-  const linkedDoc = await DocumentModel.findOne({
-    workspaceId,
-    $or: [{ fileId }, { "attachments.fileId": fileId }],
-  })
-    .select("_id")
-    .lean();
-  if (!linkedDoc) {
+  const file = await FileModel.findById(fileId).lean();
+  if (!file) {
     return NextResponse.json({ error: "הקובץ לא נמצא" }, { status: 404 });
   }
 
-  const file = await FileModel.findById(fileId).lean();
-  if (!file) {
+  // שלב האימות: כל קובץ שהועלה דרך /api/files/upload (מסמכים, רשימות קניות וכו')
+  // נושא מאז workspaceId שנקבע בזמן ההעלאה - בודקים שהוא תואם ל-workspace הפעיל.
+  // קבצים ישנים (שהועלו לפני הוספת השדה) לא נושאים אותו - לגביהם, נבדק לחילופין
+  // שיש רשומת Document באותו workspace שמצביעה עליו (כקובץ הבודד הישן).
+  const authorized = file.workspaceId
+    ? file.workspaceId.toString() === workspaceId
+    : !!(await DocumentModel.findOne({ workspaceId, fileId }).select("_id").lean());
+
+  if (!authorized) {
     return NextResponse.json({ error: "הקובץ לא נמצא" }, { status: 404 });
   }
 

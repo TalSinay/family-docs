@@ -40,3 +40,53 @@ export async function sanitizeAttachments(
 
   return wellFormed.filter((a) => ownedIds.has(a.fileId));
 }
+
+export type ShoppingItemInput = {
+  _id?: string;
+  name: string;
+  quantity: number;
+  imageFileId?: string;
+  inCart: boolean;
+};
+
+// כמו sanitizeAttachments, אבל לפריטי רשימת קניות: שם/כמות/inCart מנורמלים,
+// ו-imageFileId (אופציונלי) מתקבל רק אם הקובץ באמת הועלה ב-workspace הפעיל.
+export async function sanitizeShoppingItems(
+  raw: unknown,
+  workspaceId: string
+): Promise<ShoppingItemInput[]> {
+  if (!Array.isArray(raw)) return [];
+
+  const wellFormed = raw.filter(
+    (it): it is Record<string, unknown> =>
+      !!it && typeof it === "object" && typeof (it as Record<string, unknown>).name === "string"
+  );
+  if (wellFormed.length === 0) return [];
+
+  const candidateImageIds = wellFormed
+    .map((it) => it.imageFileId)
+    .filter((id): id is string => typeof id === "string" && mongoose.isValidObjectId(id));
+
+  let ownedImageIds = new Set<string>();
+  if (candidateImageIds.length > 0) {
+    const ownedFiles = await FileModel.find({ _id: { $in: candidateImageIds }, workspaceId })
+      .select("_id")
+      .lean();
+    ownedImageIds = new Set(ownedFiles.map((f) => f._id.toString()));
+  }
+
+  return wellFormed
+    .map((it) => {
+      const name = String(it.name).trim();
+      const quantityRaw = typeof it.quantity === "number" ? it.quantity : Number(it.quantity);
+      const quantity = Number.isFinite(quantityRaw) && quantityRaw > 0 ? Math.floor(quantityRaw) : 1;
+      const imageFileId =
+        typeof it.imageFileId === "string" && ownedImageIds.has(it.imageFileId)
+          ? it.imageFileId
+          : undefined;
+      const _id =
+        typeof it._id === "string" && mongoose.isValidObjectId(it._id) ? it._id : undefined;
+      return { _id, name, quantity, imageFileId, inCart: !!it.inCart };
+    })
+    .filter((it) => it.name.length > 0);
+}

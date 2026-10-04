@@ -1,6 +1,16 @@
 import Link from "next/link";
 import { MAIN_CATEGORIES } from "@/lib/categories";
-import { Shield, Landmark, Gift, Receipt, Folder, TrendingDown, TrendingUp, Smartphone } from "lucide-react";
+import {
+  Shield,
+  Landmark,
+  Gift,
+  Receipt,
+  Folder,
+  TrendingDown,
+  TrendingUp,
+  Smartphone,
+  ShoppingCart,
+} from "lucide-react";
 
 const ICONS: Record<string, React.ComponentType<{ size?: number; className?: string }>> = {
   ביטוחים: Shield,
@@ -33,8 +43,18 @@ export default function CategoriesPage() {
           );
         })}
 
-        {/* קישור קבוע נוסף, לא חלק ממודל הקטגוריות של המסמכים - מוביל לרשימת
-            האפליקציות החיצוניות (/apps), ראו src/lib/externalApps.ts */}
+        {/* קישורים קבועים נוספים, לא חלק ממודל הקטגוריות של המסמכים (זמן/מבנה נתונים
+            שונה) - ראו src/app/shopping ו-src/lib/externalApps.ts */}
+        <Link
+          href="/shopping"
+          className="card p-5 flex flex-col items-center gap-2 hover:border-teal-300 transition-colors"
+        >
+          <div className="w-12 h-12 rounded-2xl bg-teal-50 text-teal-700 flex items-center justify-center">
+            <ShoppingCart size={22} />
+          </div>
+          <span className="font-medium">קניות</span>
+        </Link>
+
         <Link
           href="/apps"
           className="card p-5 flex flex-col items-center gap-2 hover:border-teal-300 transition-colors"
