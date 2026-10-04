@@ -15,6 +15,42 @@ self.addEventListener("activate", (event) => {
   self.clients.claim();
 });
 
+// התראת Push שהתקבלה מהשרת (ראו src/lib/push.ts) - payload הוא JSON עם
+// {title, body, url}.
+self.addEventListener("push", (event) => {
+  let data = {};
+  try {
+    data = event.data ? event.data.json() : {};
+  } catch {
+    data = {};
+  }
+  const title = data.title || "תיק המשפחה";
+  event.waitUntil(
+    self.registration.showNotification(title, {
+      body: data.body || "",
+      icon: "/icons/icon-192.png",
+      badge: "/icons/icon-192.png",
+      dir: "rtl",
+      lang: "he",
+      data: { url: data.url || "/dashboard" },
+    })
+  );
+});
+
+// לחיצה על ההתראה - פותחת/מעלה לקדמה חלון קיים של האפליקציה בכתובת הרלוונטית
+self.addEventListener("notificationclick", (event) => {
+  event.notification.close();
+  const url = event.notification.data?.url || "/dashboard";
+  event.waitUntil(
+    self.clients.matchAll({ type: "window", includeUncontrolled: true }).then((clients) => {
+      for (const client of clients) {
+        if (client.url.includes(url) && "focus" in client) return client.focus();
+      }
+      return self.clients.openWindow(url);
+    })
+  );
+});
+
 // אסטרטגיה: network-first לדפי API/HTML, cache-first לנכסים סטטיים.
 // כך תמיד רואים מידע עדכני כשיש רשת, אך האפליקציה עדיין נפתחת (shell בלבד) גם אופליין.
 self.addEventListener("fetch", (event) => {

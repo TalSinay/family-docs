@@ -1,0 +1,16 @@
+name: Daily Reminders Automation
+
+on:
+  schedule:
+    # רץ ב-06:00 UTC בכל יום (~09:00/08:00 שעון ישראל, בהתאם לשעון קיץ/חורף)
+    - cron: "0 6 * * *"
+  workflow_dispatch: {} # מאפשר גם הפעלה ידנית מטאב Actions ב-GitHub
+
+jobs:
+  trigger-daily-reminders:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Call daily reminders endpoint
+        run: |
+          curl -sf -X POST "${{ secrets.APP_URL }}/api/cron/daily-reminders" \
+            -H "Authorization: Bearer ${{ secrets.CRON_SECRET }}"

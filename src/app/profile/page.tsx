@@ -1,9 +1,17 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { useSession } from "next-auth/react";
-import { Save, KeyRound } from "lucide-react";
+import { Save, KeyRound, Bell, BellOff, Plus, Trash2 } from "lucide-react";
+import {
+  isPushSupported,
+  getPushSubscriptionStatus,
+  enablePush,
+  disablePush,
+} from "@/lib/pushClient";
+
+type MonthlyReminder = { _id: string; title: string; dayOfMonth: number };
 
 export default function ProfilePage() {
   const { update } = useSession();
@@ -24,6 +32,16 @@ export default function ProfilePage() {
   const [passwordSavedMsg, setPasswordSavedMsg] = useState("");
   const [savingPassword, setSavingPassword] = useState(false);
 
+  const [pushSupported, setPushSupported] = useState(false);
+  const [pushEnabled, setPushEnabled] = useState(false);
+  const [pushLoading, setPushLoading] = useState(false);
+  const [pushError, setPushError] = useState("");
+
+  const [reminders, setReminders] = useState<MonthlyReminder[]>([]);
+  const [reminderTitle, setReminderTitle] = useState("");
+  const [reminderDay, setReminderDay] = useState("1");
+  const [addingReminder, setAddingReminder] = useState(false);
+
   useEffect(() => {
     (async () => {
       const res = await fetch("/api/profile");
@@ -35,6 +53,64 @@ export default function ProfilePage() {
       setLoading(false);
     })();
   }, []);
+
+  useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- בדיקת תמיכה/מצב מינוי במכשיר, לא לולאת render
+    setPushSupported(isPushSupported());
+    getPushSubscriptionStatus().then(setPushEnabled);
+  }, []);
+
+  const fetchReminders = useCallback(async () => {
+    const res = await fetch("/api/monthly-reminders");
+    if (res.ok) setReminders(await res.json());
+  }, []);
+
+  useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- טעינת תזכורות בעלייה, לא לולאת render
+    fetchReminders();
+  }, [fetchReminders]);
+
+  async function togglePush() {
+    setPushError("");
+    setPushLoading(true);
+    try {
+      if (pushEnabled) {
+        await disablePush();
+        setPushEnabled(false);
+      } else {
+        const res = await enablePush();
+        if (!res.ok) setPushError(res.error || "שגיאה בהפעלת התראות");
+        else setPushEnabled(true);
+      }
+    } finally {
+      setPushLoading(false);
+    }
+  }
+
+  async function addReminder(e: React.FormEvent) {
+    e.preventDefault();
+    if (!reminderTitle.trim()) return;
+    setAddingReminder(true);
+    try {
+      const res = await fetch("/api/monthly-reminders", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ title: reminderTitle.trim(), dayOfMonth: Number(reminderDay) }),
+      });
+      if (res.ok) {
+        setReminderTitle("");
+        setReminderDay("1");
+        fetchReminders();
+      }
+    } finally {
+      setAddingReminder(false);
+    }
+  }
+
+  async function deleteReminder(id: string) {
+    setReminders((prev) => prev.filter((r) => r._id !== id));
+    await fetch(`/api/monthly-reminders/${id}`, { method: "DELETE" });
+  }
 
   async function saveName(e: React.FormEvent) {
     e.preventDefault();
@@ -180,6 +256,85 @@ export default function ProfilePage() {
             </button>
             {passwordSavedMsg && <span className="text-sm text-emerald-600">{passwordSavedMsg}</span>}
           </div>
+        </form>
+      </section>
+
+      <section className="card p-5 space-y-3">
+        <h2 className="font-bold text-lg">התראות</h2>
+        {!pushSupported ? (
+          <p className="text-sm text-slate-400">הדפדפן/המכשיר הזה לא תומך בהתראות push.</p>
+        ) : (
+          <>
+            <p className="text-sm text-slate-500">
+              קבלת התראה למכשיר הזה על משימות שהגיע/עבר תאריך היעד שלהן, מסמכים עם תאריך יעד
+              מתקרב, ותזכורות חודשיות (למטה).
+            </p>
+            {pushError && <p className="text-sm text-red-600">{pushError}</p>}
+            <button
+              onClick={togglePush}
+              disabled={pushLoading}
+              className={`flex items-center gap-2 disabled:opacity-60 ${
+                pushEnabled ? "btn-secondary" : "btn-primary"
+              }`}
+            >
+              {pushEnabled ? <BellOff size={16} /> : <Bell size={16} />}
+              {pushLoading ? "מעבד..." : pushEnabled ? "כיבוי התראות במכשיר זה" : "הפעלת התראות במכשיר זה"}
+            </button>
+          </>
+        )}
+      </section>
+
+      <section className="card p-5 space-y-3">
+        <h2 className="font-bold text-lg">תזכורות חודשיות חוזרות</h2>
+        <p className="text-sm text-slate-500">
+          תזכורת שתישלח בכל חודש, ביום הנבחר, לכל חברי ה-workspace שהפעילו התראות (למשל
+          &quot;להעלות תלוש שכר&quot;).
+        </p>
+
+        <div className="space-y-1.5">
+          {reminders.length === 0 && (
+            <p className="text-sm text-slate-400">אין תזכורות חודשיות עדיין.</p>
+          )}
+          {reminders.map((r) => (
+            <div key={r._id} className="flex items-center gap-2 bg-slate-50 rounded-lg px-3 py-2">
+              <span className="text-xs font-semibold text-teal-700 bg-teal-50 rounded-full px-2 py-0.5 shrink-0">
+                {r.dayOfMonth} לחודש
+              </span>
+              <span className="text-sm flex-1 truncate">{r.title}</span>
+              <button
+                onClick={() => deleteReminder(r._id)}
+                className="shrink-0 text-slate-400 hover:text-red-600"
+                aria-label="מחיקת תזכורת"
+              >
+                <Trash2 size={16} />
+              </button>
+            </div>
+          ))}
+        </div>
+
+        <form onSubmit={addReminder} className="flex gap-2">
+          <input
+            className="input flex-1"
+            placeholder="לדוגמה: להעלות תלוש שכר - דניאל"
+            value={reminderTitle}
+            onChange={(e) => setReminderTitle(e.target.value)}
+          />
+          <input
+            type="number"
+            min="1"
+            max="28"
+            className="input w-20"
+            value={reminderDay}
+            onChange={(e) => setReminderDay(e.target.value)}
+          />
+          <button
+            type="submit"
+            disabled={addingReminder || !reminderTitle.trim()}
+            className="btn-primary px-3 disabled:opacity-60"
+            aria-label="הוספת תזכורת"
+          >
+            <Plus size={16} />
+          </button>
         </form>
       </section>
     </div>
