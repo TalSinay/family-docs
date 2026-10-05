@@ -17,6 +17,11 @@ export interface IAttachment {
   fileSize: number;
 }
 
+export interface IAmountHistoryEntry {
+  amount: number;
+  at: Date;
+}
+
 export interface IDocument {
   _id: mongoose.Types.ObjectId;
   workspaceId: mongoose.Types.ObjectId;
@@ -35,6 +40,15 @@ export interface IDocument {
   amount?: number;
   isMonthlyPayment: boolean;
   monthlyAmount?: number;
+
+  // שדות ייעודיים לקטגוריית "פיננסים" בלבד (מקום מרוכז לאיפה הכסף נמצא)
+  platformName?: string; // שם הפלטפורמה/הגוף, לדוגמה "הפניקס", "Bitcoin"
+  expectedReturn?: number; // תשואה/רווח צפוי באחוזים
+  commissionFee?: number; // עמלה באחוזים
+  targetAmount?: number; // סכום יעד (להצגת התקדמות)
+  isLiability?: boolean; // התחייבות/חוב - מופחת מהסה"כ ולא נספר כנכס
+  amountHistory?: IAmountHistoryEntry[]; // היסטוריית עדכוני הסכום (עד MAX_AMOUNT_HISTORY אחרונים)
+
   // כדי למנוע כפילות יצירת הוצאה אוטומטית לאותו חודש מאותו מסמך מקור
   generatedForMonths: string[]; // "YYYY-MM"
   generatedFromDocId?: mongoose.Types.ObjectId; // אם זו רשומת הוצאה שנוצרה אוטומטית
@@ -67,6 +81,13 @@ const AttachmentSchema = new Schema<IAttachment>(
   { _id: false }
 );
 
+const AmountHistorySchema = new Schema<IAmountHistoryEntry>(
+  { amount: { type: Number, required: true }, at: { type: Date, required: true } },
+  { _id: false }
+);
+
+export const MAX_AMOUNT_HISTORY = 50;
+
 const DocumentSchema = new Schema<IDocument>({
   workspaceId: { type: Schema.Types.ObjectId, ref: "Workspace", required: true },
   title: { type: String, required: true },
@@ -83,6 +104,12 @@ const DocumentSchema = new Schema<IDocument>({
   amount: { type: Number },
   isMonthlyPayment: { type: Boolean, default: false },
   monthlyAmount: { type: Number },
+  platformName: { type: String },
+  expectedReturn: { type: Number },
+  commissionFee: { type: Number },
+  targetAmount: { type: Number },
+  isLiability: { type: Boolean, default: false },
+  amountHistory: { type: [AmountHistorySchema], default: [] },
   generatedForMonths: { type: [String], default: [] },
   generatedFromDocId: { type: Schema.Types.ObjectId, ref: "Document" },
 

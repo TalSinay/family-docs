@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { auth } from "@/lib/auth";
 import { MAIN_CATEGORIES } from "@/lib/categories";
 import {
   Shield,
@@ -10,6 +11,7 @@ import {
   TrendingUp,
   Smartphone,
   ShoppingCart,
+  UserCircle,
 } from "lucide-react";
 
 const ICONS: Record<string, React.ComponentType<{ size?: number; className?: string }>> = {
@@ -22,7 +24,11 @@ const ICONS: Record<string, React.ComponentType<{ size?: number; className?: str
   הכנסות: TrendingUp,
 };
 
-export default function CategoriesPage() {
+export default async function CategoriesPage() {
+  // אריח "אזור אישי" מוצג רק למשתמש עם תפקיד admin (בעל החשבון)
+  const session = await auth();
+  const showPersonalArea = session?.user?.role === "admin";
+
   return (
     <div className="space-y-4">
       <h1 className="text-xl font-bold">קטגוריות</h1>
@@ -64,6 +70,18 @@ export default function CategoriesPage() {
           </div>
           <span className="font-medium">האפליקציות שלי</span>
         </Link>
+
+        {showPersonalArea && (
+          <Link
+            href="/personal"
+            className="card p-5 flex flex-col items-center gap-2 hover:border-teal-300 transition-colors"
+          >
+            <div className="w-12 h-12 rounded-2xl bg-teal-50 text-teal-700 flex items-center justify-center">
+              <UserCircle size={22} />
+            </div>
+            <span className="font-medium">אזור אישי</span>
+          </Link>
+        )}
       </div>
     </div>
   );

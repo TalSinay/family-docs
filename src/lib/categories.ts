@@ -14,7 +14,7 @@ export type MainCategory = (typeof MAIN_CATEGORIES)[number];
 
 export const DEFAULT_SUBCATEGORIES: Record<MainCategory, string[]> = {
   ביטוחים: ["רכב", "חיים", "שיניים", "דירה"],
-  פיננסים: ["בנק", "קרן השתלמות", "קרן פנסיה", "השקעות"],
+  פיננסים: ["בנק", "קרן השתלמות", "קרן פנסיה", "השקעות", "מניות", "קריפטו", "נדל״ן", "מזומן"],
   זיכויים: ["אופנה", "מוצרי חשמל", "מוצרי תינוקות"],
   קבלות: ["אופנה", "מוצרי חשמל", "מוצרי תינוקות"],
   כללי: ["מסמכים טל", "מסמכים דניאל", "מסמכי הבית"],
@@ -24,6 +24,9 @@ export const DEFAULT_SUBCATEGORIES: Record<MainCategory, string[]> = {
 
 // קטגוריות שבהן יש הצגה של שדה "סכום" ו"תשלום חודשי"
 export const FINANCIAL_CATEGORIES: MainCategory[] = ["ביטוחים", "פיננסים", "הוצאות", "הכנסות"];
+
+// קטגוריה עם מסך סיכום ייעודי (סה"כ, עוגה, עדכון סכום מהיר)
+export const FINANCE_CATEGORY: MainCategory = "פיננסים";
 
 export const CATEGORY_ICONS: Record<MainCategory, string> = {
   ביטוחים: "shield",

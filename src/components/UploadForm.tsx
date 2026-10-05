@@ -5,6 +5,12 @@ import { useRouter } from "next/navigation";
 import { Plus, Trash2, Upload, FileText } from "lucide-react";
 import { FINANCIAL_CATEGORIES, MAIN_CATEGORIES, MainCategory } from "@/lib/categories";
 import { formatFileSize } from "@/lib/format";
+import {
+  EMPTY_FINANCE_VALUES,
+  FinanceFieldsInputs,
+  FinanceFormValues,
+  financeValuesToPayload,
+} from "./FinanceFieldsInputs";
 
 type CustomField = { key: string; value: string };
 
@@ -29,6 +35,7 @@ export function UploadForm({
   const [amount, setAmount] = useState("");
   const [isMonthlyPayment, setIsMonthlyPayment] = useState(false);
   const [monthlyAmount, setMonthlyAmount] = useState("");
+  const [finance, setFinance] = useState<FinanceFormValues>(EMPTY_FINANCE_VALUES);
   const [dueDate, setDueDate] = useState("");
   const [dueDateTitle, setDueDateTitle] = useState("");
   const [customFields, setCustomFields] = useState<CustomField[]>([]);
@@ -44,6 +51,7 @@ export function UploadForm({
   }, []);
 
   const isFinancial = FINANCIAL_CATEGORIES.includes(category);
+  const isFinanceCategory = category === "פיננסים";
   const availableSubs = subcategories[category] || [];
 
   function addCustomField() {
@@ -117,6 +125,7 @@ export function UploadForm({
           isMonthlyPayment,
           monthlyAmount: isMonthlyPayment && monthlyAmount ? Number(monthlyAmount) : undefined,
           attachments,
+          ...(isFinanceCategory ? financeValuesToPayload(finance) : {}),
         }),
       });
 
@@ -233,6 +242,8 @@ export function UploadForm({
           </div>
         </div>
       )}
+
+      {isFinanceCategory && <FinanceFieldsInputs values={finance} onChange={setFinance} />}
 
       <div>
         <label className="label">קישור לפלטפורמה</label>

@@ -67,7 +67,7 @@ export function AppShell({ children }: { children: ReactNode }) {
                 title="אזור אישי"
               >
                 <UserCircle size={18} className="shrink-0" />
-                <span className="truncate">שלום, {session.user.displayName || session.user.name}</span>
+                <span className="truncate hidden sm:inline">שלום, {session.user.displayName || session.user.name}</span>
               </Link>
               {/* כפתור הרענון זמין לכל המשתמשים (לא רק admin) - כדי לקבל את גרסת
                   האפליקציה האחרונה בלי לחכות שה-PWA "יבחין" בעדכון בעצמו. */}

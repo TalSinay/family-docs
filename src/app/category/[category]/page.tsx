@@ -6,6 +6,7 @@ import DocumentModel from "@/lib/models/Document";
 import SubCategoryModel from "@/lib/models/SubCategory";
 import Workspace from "@/lib/models/Workspace";
 import { DocumentCard } from "@/components/DocumentCard";
+import { FinanceOverview, FinanceDoc } from "@/components/FinanceOverview";
 import { DEFAULT_SUBCATEGORIES, MAIN_CATEGORIES, MainCategory } from "@/lib/categories";
 import clsx from "clsx";
 
@@ -34,7 +35,12 @@ export default async function CategoryPage({
 
   const [customSubs, docs, workspace] = await Promise.all([
     SubCategoryModel.find({ category, workspaceId }).lean(),
-    DocumentModel.find({ workspaceId, category, ...(sub ? { subcategory: sub } : {}) })
+    DocumentModel.find({
+      workspaceId,
+      category,
+      // בפיננסים הסיכום (סה"כ/עוגה) תמיד על כל הרשומות; הסינון חל על הרשימה בלבד
+      ...(sub && category !== "פיננסים" ? { subcategory: sub } : {}),
+    })
       .sort({ uploadedAt: -1 })
       .populate("uploadedBy", "name")
       .lean(),
@@ -80,6 +86,13 @@ export default async function CategoryPage({
         </div>
       )}
 
+      {category === "פיננסים" ? (
+        <FinanceOverview
+          key={docs.map((d) => `${d._id}:${d.amount ?? ""}`).join(",")}
+          initialDocs={JSON.parse(JSON.stringify(docs)) as FinanceDoc[]}
+          sub={sub}
+        />
+      ) : (
       <div className="space-y-2">
         {docs.length === 0 && (
           <p className="text-sm text-slate-400 text-center py-8">אין עדיין מסמכים בקטגוריה הזו.</p>
@@ -88,6 +101,7 @@ export default async function CategoryPage({
           <DocumentCard key={doc._id} doc={doc as never} />
         ))}
       </div>
+      )}
     </div>
   );
 }

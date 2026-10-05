@@ -5,6 +5,7 @@ import DocumentModel from "@/lib/models/Document";
 import SubCategory from "@/lib/models/SubCategory";
 import { overlayUploaderDisplayNames } from "@/lib/resolveDisplayNames";
 import { sanitizeAttachments } from "@/lib/attachments";
+import { sanitizeFinanceFields } from "@/lib/financeFields";
 
 export async function GET(req: NextRequest) {
   const { workspaceId, error } = await requireWorkspace();
@@ -55,6 +56,7 @@ export async function POST(req: NextRequest) {
     monthlyAmount,
     attachments,
   } = body;
+  const finance = category === "פיננסים" ? sanitizeFinanceFields(body) : {};
 
   if (!title || !category) {
     return NextResponse.json({ error: "חסרים שדות חובה: כותרת וקטגוריה" }, { status: 400 });
@@ -88,6 +90,11 @@ export async function POST(req: NextRequest) {
     isMonthlyPayment: !!isMonthlyPayment,
     monthlyAmount: isMonthlyPayment ? monthlyAmount : undefined,
     attachments: validAttachments,
+    ...finance,
+    // רישום ראשוני בהיסטוריה, כדי שעדכון הסכום הבא יוכל להציג "שינוי מהעדכון הקודם"
+    ...(category === "פיננסים" && typeof amount === "number"
+      ? { amountHistory: [{ amount, at: new Date() }] }
+      : {}),
     uploadedBy: session!.user.id,
   });
 

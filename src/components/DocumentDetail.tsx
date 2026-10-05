@@ -15,6 +15,11 @@ import {
 } from "lucide-react";
 import { formatDateTime, formatCurrency, formatFileSize } from "@/lib/format";
 import { FINANCIAL_CATEGORIES } from "@/lib/categories";
+import {
+  FinanceFieldsInputs,
+  FinanceFormValues,
+  financeValuesToPayload,
+} from "./FinanceFieldsInputs";
 
 type CustomField = { key: string; value: string };
 
@@ -37,6 +42,12 @@ type DocData = {
   amount?: number;
   isMonthlyPayment?: boolean;
   monthlyAmount?: number;
+  platformName?: string;
+  expectedReturn?: number;
+  commissionFee?: number;
+  targetAmount?: number;
+  isLiability?: boolean;
+  amountHistory?: { amount: number; at: string }[];
   dueDate?: string;
   dueDateTitle?: string;
   attachments?: Attachment[];
@@ -61,6 +72,16 @@ export function DocumentDetail({ doc: initialDoc }: { doc: DocData }) {
   const [monthlyAmount, setMonthlyAmount] = useState(
     initialDoc.monthlyAmount != null ? String(initialDoc.monthlyAmount) : ""
   );
+  const [amountInput, setAmountInput] = useState(
+    initialDoc.amount != null ? String(initialDoc.amount) : ""
+  );
+  const [finance, setFinance] = useState<FinanceFormValues>({
+    platformName: initialDoc.platformName || "",
+    expectedReturn: initialDoc.expectedReturn != null ? String(initialDoc.expectedReturn) : "",
+    commissionFee: initialDoc.commissionFee != null ? String(initialDoc.commissionFee) : "",
+    targetAmount: initialDoc.targetAmount != null ? String(initialDoc.targetAmount) : "",
+    isLiability: !!initialDoc.isLiability,
+  });
   const [dueDate, setDueDate] = useState(initialDoc.dueDate || "");
   const [dueDateTitle, setDueDateTitle] = useState(initialDoc.dueDateTitle || "");
   const [saving, setSaving] = useState(false);
@@ -68,6 +89,7 @@ export function DocumentDetail({ doc: initialDoc }: { doc: DocData }) {
   const [uploadingFiles, setUploadingFiles] = useState(false);
   const [attachError, setAttachError] = useState("");
 
+  const isFinanceCategory = doc.category === "פיננסים";
   const isFinancial = FINANCIAL_CATEGORIES.includes(doc.category as (typeof FINANCIAL_CATEGORIES)[number]);
 
   // מסמכים חדשים נשמרים כולם ב-attachments; מסמכים ישנים (מלפני התמיכה בכמה
@@ -157,6 +179,12 @@ export function DocumentDetail({ doc: initialDoc }: { doc: DocData }) {
       monthlyAmount: isMonthlyPayment && monthlyAmount ? Number(monthlyAmount) : undefined,
       dueDate: dueDate || "",
       dueDateTitle: dueDate ? dueDateTitle || undefined : undefined,
+      ...(isFinanceCategory
+        ? {
+            amount: amountInput.trim() === "" ? null : Number(amountInput),
+            ...financeValuesToPayload(finance),
+          }
+        : {}),
     });
     setSaving(false);
     setSavedMsg(ok ? "נשמר" : "שגיאה בשמירה");
@@ -213,7 +241,7 @@ export function DocumentDetail({ doc: initialDoc }: { doc: DocData }) {
           <p>נצפה לאחרונה: {formatDateTime(doc.lastOpenedAt)}</p>
         </div>
 
-        {typeof doc.amount === "number" && (
+        {!isFinanceCategory && typeof doc.amount === "number" && (
           <div className="mt-3 flex items-center gap-2 flex-wrap">
             <span className="bg-slate-100 rounded-full px-3 py-1 text-sm font-medium">
               סכום: {formatCurrency(doc.amount)}
@@ -313,6 +341,39 @@ export function DocumentDetail({ doc: initialDoc }: { doc: DocData }) {
           />
         )}
       </div>
+
+      {isFinanceCategory && (
+        <div className="card p-5 space-y-3">
+          <div>
+            <label className="label">סכום נוכחי (₪)</label>
+            <input
+              type="number"
+              step="0.01"
+              inputMode="decimal"
+              className="input"
+              value={amountInput}
+              onChange={(e) => setAmountInput(e.target.value)}
+            />
+          </div>
+          <FinanceFieldsInputs values={finance} onChange={setFinance} />
+          {(doc.amountHistory?.length ?? 0) > 1 && (
+            <div>
+              <p className="label">היסטוריית עדכוני סכום</p>
+              <div className="space-y-1 text-sm">
+                {[...(doc.amountHistory || [])]
+                  .reverse()
+                  .slice(0, 10)
+                  .map((h, i) => (
+                    <div key={i} className="flex justify-between text-slate-600">
+                      <span>{formatDateTime(h.at)}</span>
+                      <span className="font-medium">{formatCurrency(h.amount)}</span>
+                    </div>
+                  ))}
+              </div>
+            </div>
+          )}
+        </div>
+      )}
 
       {isFinancial && (
         <div className="card p-5">
