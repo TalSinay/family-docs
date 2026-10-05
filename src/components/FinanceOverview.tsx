@@ -54,8 +54,11 @@ export function FinanceOverview({ initialDocs, sub }: { initialDocs: FinanceDoc[
   const [error, setError] = useState("");
 
   const withAmount = docs.filter((d) => typeof d.amount === "number");
-  const assets = withAmount.filter((d) => !d.isLiability);
-  const liabilities = withAmount.filter((d) => d.isLiability);
+  // קרן השתלמות/פנסיה לא נכללות בסה"כ - הן מוצגות בעוגה נפרדת עם סכום משלהן
+  const isPension = (d: FinanceDoc) => !!d.subcategory && PENSION_TYPES.includes(d.subcategory);
+  const countable = withAmount.filter((d) => !isPension(d));
+  const assets = countable.filter((d) => !d.isLiability);
+  const liabilities = countable.filter((d) => d.isLiability);
   const assetsTotal = assets.reduce((s, d) => s + (d.amount as number), 0);
   const liabilitiesTotal = liabilities.reduce((s, d) => s + (d.amount as number), 0);
   const net = assetsTotal - liabilitiesTotal;
@@ -66,8 +69,7 @@ export function FinanceOverview({ initialDocs, sub }: { initialDocs: FinanceDoc[
 
   // העוגה העליונה: נכסים בסכום חיובי, בלי הקרנות (השתלמות/פנסיה) שמוצגות בעוגה נפרדת.
   // הבנק נכלל בעוגה העליונה.
-  const positive = assets.filter((d) => (d.amount as number) > 0);
-  const isPension = (d: FinanceDoc) => !!d.subcategory && PENSION_TYPES.includes(d.subcategory);
+  const positive = withAmount.filter((d) => !d.isLiability && (d.amount as number) > 0);
   const topSlices: Slice[] = [];
   if (groupBy === "record") {
     for (const d of positive.filter((d) => !isPension(d))) {
