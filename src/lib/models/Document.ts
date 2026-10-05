@@ -46,7 +46,12 @@ export interface IDocument {
   expectedReturn?: number; // תשואה/רווח צפוי באחוזים
   commissionFee?: number; // עמלה באחוזים
   targetAmount?: number; // סכום יעד (להצגת התקדמות)
-  isLiability?: boolean; // התחייבות/חוב - מופחת מהסה"כ ולא נספר כנכס
+  isLiability?: boolean;
+  // רשומת הבנק הקבועה (אחת ל-workspace): amount = היתרה לתחילת bankBaseMonth; כש-bankAutoSync
+  // פעיל, היתרה המוצגת = amount + מאזן הכנסות-הוצאות מאז bankBaseMonth ועד החודש הנוכחי.
+  isBank?: boolean;
+  bankAutoSync?: boolean;
+  bankBaseMonth?: string; // "YYYY-MM" // התחייבות/חוב - מופחת מהסה"כ ולא נספר כנכס
   amountHistory?: IAmountHistoryEntry[]; // היסטוריית עדכוני הסכום (עד MAX_AMOUNT_HISTORY אחרונים)
 
   // כדי למנוע כפילות יצירת הוצאה אוטומטית לאותו חודש מאותו מסמך מקור
@@ -109,6 +114,9 @@ const DocumentSchema = new Schema<IDocument>({
   commissionFee: { type: Number },
   targetAmount: { type: Number },
   isLiability: { type: Boolean, default: false },
+  isBank: { type: Boolean, default: false },
+  bankAutoSync: { type: Boolean, default: false },
+  bankBaseMonth: { type: String },
   amountHistory: { type: [AmountHistorySchema], default: [] },
   generatedForMonths: { type: [String], default: [] },
   generatedFromDocId: { type: Schema.Types.ObjectId, ref: "Document" },

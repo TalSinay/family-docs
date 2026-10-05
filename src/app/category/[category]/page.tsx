@@ -6,6 +6,7 @@ import DocumentModel from "@/lib/models/Document";
 import SubCategoryModel from "@/lib/models/SubCategory";
 import Workspace from "@/lib/models/Workspace";
 import { DocumentCard } from "@/components/DocumentCard";
+import { computeBankEffective } from "@/lib/bank";
 import { FinanceOverview, FinanceDoc } from "@/components/FinanceOverview";
 import { DEFAULT_SUBCATEGORIES, MAIN_CATEGORIES, MainCategory } from "@/lib/categories";
 import clsx from "clsx";
@@ -46,6 +47,19 @@ export default async function CategoryPage({
       .lean(),
     Workspace.findById(workspaceId).select("generalLabels").lean(),
   ]);
+
+  // רשומת הבנק: היתרה המוצגת מחושבת בשרת (כולל מאזן החודש במצב אוטומטי)
+  const financeDocs: FinanceDoc[] = JSON.parse(JSON.stringify(docs));
+  if (category === "פיננסים") {
+    for (let i = 0; i < docs.length; i++) {
+      const d = docs[i];
+      if (!d.isBank) continue;
+      const { effective, delta } = await computeBankEffective(workspaceId, d);
+      financeDocs[i].bankBaseAmount = d.amount ?? 0;
+      financeDocs[i].bankDelta = delta;
+      financeDocs[i].amount = effective;
+    }
+  }
 
   // בקטגוריית "כללי" ניתן להתאים אישית פר-workspace את תתי-הקטגוריות המוצעות
   // (לדוגמה שמות בני המשפחה) - אם הוגדרו, משתמשים בהן במקום ברירת המחדל
@@ -88,8 +102,8 @@ export default async function CategoryPage({
 
       {category === "פיננסים" ? (
         <FinanceOverview
-          key={docs.map((d) => `${d._id}:${d.amount ?? ""}`).join(",")}
-          initialDocs={JSON.parse(JSON.stringify(docs)) as FinanceDoc[]}
+          key={financeDocs.map((d) => `${d._id}:${d.amount ?? ""}:${d.bankAutoSync ?? ""}`).join(",")}
+          initialDocs={financeDocs}
           sub={sub}
         />
       ) : (

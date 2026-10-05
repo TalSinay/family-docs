@@ -88,12 +88,17 @@ export async function PATCH(
   // זו הפעם הראשונה), כדי להציג "שינוי מהעדכון הקודם". שדות פיננסים ייעודיים
   // נשמרים רק לרשומות בקטגוריית פיננסים.
   let historyPush: Record<string, unknown> | undefined;
-  if (typeof update.amount === "number" || Object.keys(finance).length) {
+  if ("amount" in update || Object.keys(finance).length) {
     const existing = await DocumentModel.findOne({ _id: id, workspaceId }).select(
-      "category amount amountHistory uploadedAt"
+      "category isBank amount amountHistory uploadedAt"
     );
+    // יתרת הבנק מנוהלת רק דרך /api/bank (מצב ידני/אוטומטי)
+    if (existing?.isBank) delete update.amount;
     if (existing && existing.category === "פיננסים") {
       Object.assign(update, finance);
+      if (existing.isBank) {
+        delete update.isLiability;
+      }
       if (typeof update.amount === "number" && existing.amount !== update.amount) {
         const entries: { amount: number; at: Date }[] = [];
         if (!existing.amountHistory?.length && typeof existing.amount === "number") {

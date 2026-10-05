@@ -47,6 +47,7 @@ type DocData = {
   commissionFee?: number;
   targetAmount?: number;
   isLiability?: boolean;
+  isBank?: boolean;
   amountHistory?: { amount: number; at: string }[];
   dueDate?: string;
   dueDateTitle?: string;
@@ -181,7 +182,7 @@ export function DocumentDetail({ doc: initialDoc }: { doc: DocData }) {
       dueDateTitle: dueDate ? dueDateTitle || undefined : undefined,
       ...(isFinanceCategory
         ? {
-            amount: amountInput.trim() === "" ? null : Number(amountInput),
+            ...(doc.isBank ? {} : { amount: amountInput.trim() === "" ? null : Number(amountInput) }),
             ...financeValuesToPayload(finance),
           }
         : {}),
@@ -344,6 +345,11 @@ export function DocumentDetail({ doc: initialDoc }: { doc: DocData }) {
 
       {isFinanceCategory && (
         <div className="card p-5 space-y-3">
+          {doc.isBank ? (
+            <p className="text-sm text-slate-500">
+              יתרת הבנק מתעדכנת מכרטיס הבנק בראש עמוד &quot;פיננסים&quot; (ידנית או לפי מאזן החודש).
+            </p>
+          ) : (
           <div>
             <label className="label">סכום נוכחי (₪)</label>
             <input
@@ -355,6 +361,7 @@ export function DocumentDetail({ doc: initialDoc }: { doc: DocData }) {
               onChange={(e) => setAmountInput(e.target.value)}
             />
           </div>
+          )}
           <FinanceFieldsInputs values={finance} onChange={setFinance} />
           {(doc.amountHistory?.length ?? 0) > 1 && (
             <div>

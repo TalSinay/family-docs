@@ -3,7 +3,7 @@
 import { useState } from "react";
 import Link from "next/link";
 import { Pie, PieChart, Cell, ResponsiveContainer, Tooltip } from "recharts";
-import { Pencil, Check, X, ExternalLink, TrendingUp, TrendingDown } from "lucide-react";
+import { Pencil, Check, X, ExternalLink, TrendingUp, TrendingDown, Landmark } from "lucide-react";
 import { formatCurrency, formatDate } from "@/lib/format";
 
 export type FinanceDoc = {
@@ -16,6 +16,10 @@ export type FinanceDoc = {
   commissionFee?: number;
   targetAmount?: number;
   isLiability?: boolean;
+  isBank?: boolean;
+  bankAutoSync?: boolean;
+  bankBaseAmount?: number; // היתרה שהוזנה (בסיס) - רק לרשומת הבנק
+  bankDelta?: number; // מאזן החודש/ים שנוסף לבסיס במצב אוטומטי
   externalLink?: string;
   amountHistory?: { amount: number; at: string }[];
   uploadedAt: string;
@@ -24,6 +28,10 @@ export type FinanceDoc = {
 const COLORS = ["#0f766e", "#0ea5e9", "#f59e0b", "#8b5cf6", "#ec4899", "#22c55e", "#ef4444", "#64748b", "#14b8a6", "#f97316"];
 
 type GroupBy = "record" | "type";
+type Slice = { name: string; value: number };
+
+// סוגים שמוצגים בעוגה נפרדת (חיסכון פנסיוני) ולא בעוגה העליונה
+const PENSION_TYPES = ["קרן השתלמות", "קרן פנסיה"];
 
 function lastUpdated(d: FinanceDoc): string {
   const h = d.amountHistory;
@@ -56,25 +64,35 @@ export function FinanceOverview({ initialDocs, sub }: { initialDocs: FinanceDoc[
     0
   );
 
-  // הנתונים לעוגה: רק נכסים בסכום חיובי (התחייבויות מוצגות בנפרד בסיכום)
-  const slices: { name: string; value: number }[] = [];
+  // העוגה העליונה: נכסים בסכום חיובי, בלי הקרנות (השתלמות/פנסיה) שמוצגות בעוגה נפרדת.
+  // הבנק נכלל בעוגה העליונה.
+  const positive = assets.filter((d) => (d.amount as number) > 0);
+  const isPension = (d: FinanceDoc) => !!d.subcategory && PENSION_TYPES.includes(d.subcategory);
+  const topSlices: Slice[] = [];
   if (groupBy === "record") {
-    for (const d of assets) {
-      if ((d.amount as number) > 0) slices.push({ name: d.title, value: d.amount as number });
+    for (const d of positive.filter((d) => !isPension(d))) {
+      topSlices.push({ name: d.title, value: d.amount as number });
     }
   } else {
     const map = new Map<string, number>();
-    for (const d of assets) {
-      if ((d.amount as number) <= 0) continue;
+    for (const d of positive.filter((d) => !isPension(d))) {
       const key = d.subcategory || "ללא סוג";
       map.set(key, (map.get(key) || 0) + (d.amount as number));
     }
-    for (const [name, value] of map) slices.push({ name, value });
+    for (const [name, value] of map) topSlices.push({ name, value });
   }
-  slices.sort((a, b) => b.value - a.value);
-  const slicesTotal = slices.reduce((s, x) => s + x.value, 0);
+  topSlices.sort((a, b) => b.value - a.value);
 
-  const visible = sub ? docs.filter((d) => d.subcategory === sub) : docs;
+  const pensionSlices: Slice[] = positive
+    .filter(isPension)
+    .map((d) => ({ name: d.platformName ? `${d.title} (${d.platformName})` : d.title, value: d.amount as number }))
+    .sort((a, b) => b.value - a.value);
+
+  const bankDoc = docs.find((d) => d.isBank);
+
+  // רשומת הבנק מוצגת בכרטיס ייעודי למעלה, ולא בתוך הרשימה
+  const listDocs = docs.filter((d) => !d.isBank);
+  const visible = sub ? listDocs.filter((d) => d.subcategory === sub) : listDocs;
 
   function startEdit(d: FinanceDoc) {
     setEditingId(d._id);
@@ -116,6 +134,8 @@ export function FinanceOverview({ initialDocs, sub }: { initialDocs: FinanceDoc[
 
   return (
     <div className="space-y-4">
+      <BankCard bank={bankDoc} />
+
       <div className="card p-5 text-center">
         <p className="text-sm text-slate-500">סה&quot;כ (נטו)</p>
         <p className="text-3xl font-bold text-teal-800 mt-1">{formatCurrency(net)}</p>
@@ -128,52 +148,39 @@ export function FinanceOverview({ initialDocs, sub }: { initialDocs: FinanceDoc[
         </div>
       </div>
 
-      {slices.length > 0 && (
-        <div className="card p-4">
-          <div className="flex gap-2 justify-center mb-2">
-            {(["record", "type"] as const).map((g) => (
-              <button
-                key={g}
-                type="button"
-                onClick={() => setGroupBy(g)}
-                className={`rounded-full px-3.5 py-1 text-sm font-medium border ${
-                  groupBy === g
-                    ? "bg-teal-700 text-white border-teal-700"
-                    : "bg-white text-slate-600 border-slate-300"
-                }`}
-              >
-                {g === "record" ? "לפי רשומה" : "לפי סוג"}
-              </button>
-            ))}
-          </div>
-          <div className="h-56" dir="ltr">
-            <ResponsiveContainer width="100%" height="100%">
-              <PieChart>
-                <Pie data={slices} dataKey="value" nameKey="name" innerRadius={50} outerRadius={90} paddingAngle={2}>
-                  {slices.map((_, i) => (
-                    <Cell key={i} fill={COLORS[i % COLORS.length]} />
-                  ))}
-                </Pie>
-                <Tooltip formatter={(v) => formatCurrency(Number(v))} />
-              </PieChart>
-            </ResponsiveContainer>
-          </div>
-          <div className="space-y-1 mt-2">
-            {slices.map((s, i) => (
-              <div key={s.name} className="flex items-center gap-2 text-sm">
-                <span
-                  className="w-3 h-3 rounded-full shrink-0"
-                  style={{ backgroundColor: COLORS[i % COLORS.length] }}
-                />
-                <span className="truncate flex-1">{s.name}</span>
-                <span className="text-slate-400 text-xs">
-                  {slicesTotal > 0 ? Math.round((s.value / slicesTotal) * 100) : 0}%
-                </span>
-                <span className="font-medium">{formatCurrency(s.value)}</span>
-              </div>
-            ))}
-          </div>
-        </div>
+      {topSlices.length > 0 && (
+        <PieCard
+          slices={topSlices}
+          header={
+            <div className="flex gap-2 justify-center mb-2">
+              {(["record", "type"] as const).map((g) => (
+                <button
+                  key={g}
+                  type="button"
+                  onClick={() => setGroupBy(g)}
+                  className={`rounded-full px-3.5 py-1 text-sm font-medium border ${
+                    groupBy === g
+                      ? "bg-teal-700 text-white border-teal-700"
+                      : "bg-white text-slate-600 border-slate-300"
+                  }`}
+                >
+                  {g === "record" ? "לפי רשומה" : "לפי סוג"}
+                </button>
+              ))}
+            </div>
+          }
+        />
+      )}
+
+      {pensionSlices.length > 0 && (
+        <PieCard
+          slices={pensionSlices}
+          header={
+            <p className="text-center text-sm font-medium text-slate-600 mb-2">
+              קרן השתלמות וקרן פנסיה · {formatCurrency(pensionSlices.reduce((s, x) => s + x.value, 0))}
+            </p>
+          }
+        />
       )}
 
       {error && <p className="text-sm text-red-600">{error}</p>}
@@ -296,6 +303,175 @@ export function FinanceOverview({ initialDocs, sub }: { initialDocs: FinanceDoc[
           );
         })}
       </div>
+    </div>
+  );
+}
+
+function PieCard({ slices, header }: { slices: Slice[]; header: React.ReactNode }) {
+  const total = slices.reduce((s, x) => s + x.value, 0);
+  return (
+    <div className="card p-4">
+      {header}
+      <div className="h-56" dir="ltr">
+        <ResponsiveContainer width="100%" height="100%">
+          <PieChart>
+            <Pie data={slices} dataKey="value" nameKey="name" innerRadius={50} outerRadius={90} paddingAngle={2}>
+              {slices.map((_, i) => (
+                <Cell key={i} fill={COLORS[i % COLORS.length]} />
+              ))}
+            </Pie>
+            <Tooltip formatter={(v) => formatCurrency(Number(v))} />
+          </PieChart>
+        </ResponsiveContainer>
+      </div>
+      <div className="space-y-1 mt-2">
+        {slices.map((s, i) => (
+          <div key={s.name} className="flex items-center gap-2 text-sm">
+            <span className="w-3 h-3 rounded-full shrink-0" style={{ backgroundColor: COLORS[i % COLORS.length] }} />
+            <span className="truncate flex-1">{s.name}</span>
+            <span className="text-slate-400 text-xs">{total > 0 ? Math.round((s.value / total) * 100) : 0}%</span>
+            <span className="font-medium">{formatCurrency(s.value)}</span>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+// כרטיס הבנק הקבוע - הדבר הראשון בעמוד. שתי דרכי עדכון: ידני, או אוטומטי לפי מאזן
+// הכנסות-הוצאות (הסכום שמוזן הוא היתרה לתחילת החודש הנוכחי).
+function BankCard({ bank }: { bank?: FinanceDoc }) {
+  const [editing, setEditing] = useState(false);
+  const [value, setValue] = useState("");
+  const [autoSync, setAutoSync] = useState(false);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState("");
+
+  async function call(method: "POST" | "PATCH", payload: Record<string, unknown>) {
+    setBusy(true);
+    setError("");
+    try {
+      const res = await fetch("/api/bank", {
+        method,
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || "שמירה נכשלה");
+      // רענון מלא של הנתונים המחושבים (יתרה אפקטיבית ומאזן) מהשרת
+      window.location.reload();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "שמירה נכשלה");
+      setBusy(false);
+    }
+  }
+
+  if (!bank) {
+    return (
+      <div className="card p-5">
+        <div className="flex items-center gap-2 mb-3">
+          <Landmark size={18} className="text-teal-700" />
+          <p className="font-medium">הגדרת חשבון הבנק</p>
+        </div>
+        <input
+          type="number"
+          step="0.01"
+          inputMode="decimal"
+          className="input"
+          placeholder="יתרה נוכחית (₪)"
+          value={value}
+          onChange={(e) => setValue(e.target.value)}
+        />
+        <label className="flex items-center gap-2 text-sm text-slate-600 mt-2">
+          <input type="checkbox" className="rounded" checked={autoSync} onChange={(e) => setAutoSync(e.target.checked)} />
+          עדכון אוטומטי לפי מאזן החודש (הכנסות פחות הוצאות)
+        </label>
+        {error && <p className="text-sm text-red-600 mt-2">{error}</p>}
+        <button
+          type="button"
+          disabled={busy || value.trim() === ""}
+          onClick={() => call("POST", { amount: Number(value), autoSync })}
+          className="btn-primary w-full mt-3"
+        >
+          {busy ? "שומר..." : "צור רשומת בנק"}
+        </button>
+      </div>
+    );
+  }
+
+  const auto = !!bank.bankAutoSync;
+
+  return (
+    <div className="card p-5 border-teal-200 bg-teal-50/40">
+      <div className="flex items-center gap-2">
+        <Landmark size={18} className="text-teal-700" />
+        <p className="font-medium">בנק</p>
+        <Link href={`/documents/${bank._id}`} className="mr-auto text-xs text-teal-700 hover:underline">
+          פרטים
+        </Link>
+      </div>
+
+      {editing ? (
+        <div className="flex items-center gap-2 mt-2">
+          <input
+            autoFocus
+            type="number"
+            step="0.01"
+            inputMode="decimal"
+            className="input flex-1"
+            placeholder={auto ? "יתרה לתחילת החודש" : "יתרה"}
+            value={value}
+            onChange={(e) => setValue(e.target.value)}
+          />
+          <button
+            type="button"
+            disabled={busy || value.trim() === ""}
+            onClick={() => call("PATCH", { amount: Number(value) })}
+            className="p-2 rounded-lg bg-teal-700 text-white"
+            aria-label="שמור"
+          >
+            <Check size={16} />
+          </button>
+          <button type="button" onClick={() => setEditing(false)} className="p-2 rounded-lg bg-slate-100 text-slate-600" aria-label="ביטול">
+            <X size={16} />
+          </button>
+        </div>
+      ) : (
+        <div className="flex items-center gap-2 mt-1">
+          <span className="text-3xl font-bold text-teal-800">{formatCurrency(bank.amount)}</span>
+          <button
+            type="button"
+            onClick={() => {
+              setValue(String(auto ? bank.bankBaseAmount ?? 0 : bank.amount ?? 0));
+              setEditing(true);
+            }}
+            className="mr-auto p-2 rounded-full text-slate-400 hover:bg-white hover:text-teal-700"
+            aria-label="עדכון יתרה"
+            title="עדכון יתרה"
+          >
+            <Pencil size={16} />
+          </button>
+        </div>
+      )}
+
+      {auto && (
+        <p className="text-xs text-slate-500 mt-1">
+          {formatCurrency(bank.bankBaseAmount)} (יתרה לתחילת החודש) {(bank.bankDelta ?? 0) >= 0 ? "+" : "-"}{" "}
+          {formatCurrency(Math.abs(bank.bankDelta ?? 0))} (מאזן הכנסות-הוצאות)
+        </p>
+      )}
+
+      <label className="flex items-center gap-2 text-sm text-slate-600 mt-3">
+        <input
+          type="checkbox"
+          className="rounded"
+          checked={auto}
+          disabled={busy}
+          onChange={(e) => call("PATCH", { autoSync: e.target.checked })}
+        />
+        עדכון אוטומטי לפי מאזן החודש
+      </label>
+      {error && <p className="text-sm text-red-600 mt-2">{error}</p>}
     </div>
   );
 }
