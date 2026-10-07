@@ -9,6 +9,8 @@ export interface IMonthlyReminder {
   workspaceId: mongoose.Types.ObjectId;
   title: string;
   dayOfMonth: number; // 1-28 (נמנעים מ-29/30/31 כדי שתמיד יחול גם בפברואר)
+  time?: string; // "HH:MM" שעון ישראל; אם ריק - שעת ברירת המחדל הגלובלית
+  lastSentOn?: string; // "YYYY-MM-DD" - מונע שליחה כפולה באותו יום
   createdBy: mongoose.Types.ObjectId;
   createdAt: Date;
 }
@@ -17,6 +19,8 @@ const MonthlyReminderSchema = new Schema<IMonthlyReminder>({
   workspaceId: { type: Schema.Types.ObjectId, ref: "Workspace", required: true },
   title: { type: String, required: true },
   dayOfMonth: { type: Number, required: true, min: 1, max: 28 },
+  time: { type: String },
+  lastSentOn: { type: String },
   createdBy: { type: Schema.Types.ObjectId, ref: "User", required: true },
   createdAt: { type: Date, default: Date.now },
 });

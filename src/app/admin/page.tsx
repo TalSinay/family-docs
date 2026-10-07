@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
-import { Plus, Users, Building2, Trash2, Download } from "lucide-react";
+import { Plus, Users, Building2, Trash2, Download, Bell } from "lucide-react";
 
 type WorkspaceRow = { _id: string; name: string; memberCount: number };
 type UserRow = { _id: string; name: string; email: string; role: "admin" | "member" };
@@ -12,6 +12,8 @@ export default function AdminDashboard() {
   const [users, setUsers] = useState<UserRow[]>([]);
   const [newWorkspaceName, setNewWorkspaceName] = useState("");
   const [newUser, setNewUser] = useState({ name: "", email: "", password: "" });
+  const [notificationTime, setNotificationTime] = useState("09:00");
+  const [timeMsg, setTimeMsg] = useState("");
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(true);
 
@@ -22,6 +24,8 @@ export default function AdminDashboard() {
     ]);
     setWorkspaces(await wsRes.json());
     setUsers(await usersRes.json());
+    const settingsRes = await fetch("/api/admin/settings");
+    if (settingsRes.ok) setNotificationTime((await settingsRes.json()).notificationTime);
     setLoading(false);
   }
 
@@ -79,11 +83,46 @@ export default function AdminDashboard() {
     loadAll();
   }
 
+  async function saveNotificationTime() {
+    setTimeMsg("");
+    const res = await fetch("/api/admin/settings", {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ notificationTime }),
+    });
+    const data = await res.json();
+    setTimeMsg(res.ok ? "נשמר" : data.error || "שגיאה");
+    setTimeout(() => setTimeMsg(""), 2500);
+  }
+
   if (loading) return <p className="text-slate-500">טוען...</p>;
 
   return (
     <div className="space-y-6">
       {error && <div className="bg-red-50 text-red-700 text-sm rounded-xl px-3 py-2">{error}</div>}
+
+      <section className="card p-5">
+        <h2 className="font-bold text-lg flex items-center gap-2 mb-2">
+          <Bell size={18} /> שעת התראות
+        </h2>
+        <p className="text-sm text-slate-500 mb-3">
+          השעה (שעון ישראל) שבה נשלחות ההתראות היומיות - משימות ותאריכי יעד, ותזכורות חודשיות
+          שלא הוגדרה להן שעה משלהן. ההתראות נבדקות כל 30 דקות, ולכן עשויות להגיע עד כחצי שעה
+          אחרי השעה שנבחרה.
+        </p>
+        <div className="flex items-center gap-2">
+          <input
+            type="time"
+            className="input w-36"
+            value={notificationTime}
+            onChange={(e) => setNotificationTime(e.target.value)}
+          />
+          <button onClick={saveNotificationTime} className="btn-primary" disabled={!notificationTime}>
+            שמירה
+          </button>
+          {timeMsg && <span className="text-sm text-emerald-600">{timeMsg}</span>}
+        </div>
+      </section>
 
       <section className="card p-5">
         <h2 className="font-bold text-lg flex items-center gap-2 mb-2">
