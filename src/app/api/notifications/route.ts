@@ -20,6 +20,11 @@ function addDays(dateStr: string, days: number): string {
   ).padStart(2, "0")}`;
 }
 
+function formatDay(dateStr: string): string {
+  const [y, m, d] = dateStr.split("-");
+  return `${Number(d)}.${Number(m)}.${y}`;
+}
+
 export type ScheduledItem = {
   kind: "monthly" | "task" | "document";
   id: string;
@@ -118,10 +123,10 @@ export async function GET() {
     const time = d.notifyTime || globalTime;
     const approachingDate = addDays(dueDate, -APPROACHING_DAYS);
     let nextDate = dueDate;
-    let label = "תאריך יעד";
+    let label = `תאריך יעד ב-${formatDay(dueDate)}`;
     if (approachingDate >= today && !(approachingDate === today && d.lastNotifiedOn === today)) {
       nextDate = approachingDate;
-      label = `תאריך יעד מתקרב (בעוד ${APPROACHING_DAYS} ימים)`;
+      label = `תאריך יעד ב-${formatDay(dueDate)} · התראה ${APPROACHING_DAYS} ימים לפני`;
     } else if (dueDate === today && d.lastNotifiedOn === today) {
       continue; // כבר נשלחה היום ואין עוד התראה על המסמך הזה
     }

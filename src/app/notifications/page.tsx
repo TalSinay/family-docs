@@ -132,10 +132,38 @@ export default function NotificationsPage() {
     }
   }
 
-  async function deleteReminder(id: string) {
-    if (!confirm("למחוק את התזכורת החודשית?")) return;
-    await fetch(`/api/monthly-reminders/${id}`, { method: "DELETE" });
+  // תזכורת חודשית נמחקת. במשימה/מסמך ההתראה נגזרת מתאריך היעד, ולכן "מחיקה" מסירה את
+  // תאריך היעד (והשעה) - המשימה/המסמך עצמם נשארים.
+  async function deleteScheduled(item: Scheduled) {
+    const msg =
+      item.kind === "monthly"
+        ? "למחוק את התזכורת החודשית?"
+        : item.kind === "task"
+        ? "להסיר את ההתראה? תאריך היעד יוסר מהמשימה (המשימה עצמה תישאר)."
+        : "להסיר את ההתראה? תאריך היעד יוסר מהמסמך (המסמך עצמו יישאר).";
+    if (!confirm(msg)) return;
+    setError("");
+    let res: Response;
+    if (item.kind === "monthly") {
+      res = await fetch(endpoint("monthly", item.id), { method: "DELETE" });
+    } else {
+      const clear =
+        item.kind === "task"
+          ? { dueDate: "", notifyTime: "" }
+          : { dueDate: "", dueDateTitle: "", notifyTime: "" };
+      res = await fetch(endpoint(item.kind, item.id), {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(clear),
+      });
+    }
+    if (!res.ok) setError("המחיקה נכשלה");
     load();
+  }
+
+  async function deleteSent(id: string) {
+    setData((prev) => (prev ? { ...prev, sent: prev.sent.filter((s) => s.id !== id) } : prev));
+    await fetch(`/api/notifications/${id}`, { method: "DELETE" });
   }
 
   // --- הוספת תזכורת חודשית ---
@@ -333,15 +361,14 @@ export default function NotificationsPage() {
                         >
                           <Pencil size={16} />
                         </button>
-                        {item.kind === "monthly" && (
-                          <button
-                            onClick={() => deleteReminder(item.id)}
-                            className="p-2 rounded-full text-slate-400 hover:bg-slate-100 hover:text-red-600"
-                            aria-label="מחיקת תזכורת"
-                          >
-                            <Trash2 size={16} />
-                          </button>
-                        )}
+                        <button
+                          onClick={() => deleteScheduled(item)}
+                          className="p-2 rounded-full text-slate-400 hover:bg-slate-100 hover:text-red-600"
+                          aria-label="מחיקת התראה"
+                          title="מחיקת התראה"
+                        >
+                          <Trash2 size={16} />
+                        </button>
                       </div>
                     </div>
                   )}
@@ -359,25 +386,35 @@ export default function NotificationsPage() {
             )}
             {data.sent.map((s) => {
               const Icon = KIND_ICON[s.kind];
-              const body = (
-                <div className="flex items-start gap-3">
+              const content = (
+                <>
                   <div className="w-9 h-9 rounded-xl bg-slate-100 text-slate-500 flex items-center justify-center shrink-0">
                     <Icon size={16} />
                   </div>
                   <div className="flex-1 min-w-0">
                     <p className="font-medium break-words">{s.body}</p>
                     <p className="text-xs text-slate-500">{s.title}</p>
+                    <p className="text-xs text-slate-400">{formatDateTime(s.sentAt)}</p>
                   </div>
-                  <span className="text-xs text-slate-400 shrink-0">{formatDateTime(s.sentAt)}</span>
-                </div>
+                </>
               );
-              return s.url ? (
-                <Link key={s.id} href={s.url} className="card p-3.5 block hover:border-teal-300 transition-colors">
-                  {body}
-                </Link>
-              ) : (
-                <div key={s.id} className="card p-3.5">
-                  {body}
+              return (
+                <div key={s.id} className="card p-3.5 flex items-start gap-1">
+                  {s.url ? (
+                    <Link href={s.url} className="flex items-start gap-3 flex-1 min-w-0">
+                      {content}
+                    </Link>
+                  ) : (
+                    <div className="flex items-start gap-3 flex-1 min-w-0">{content}</div>
+                  )}
+                  <button
+                    onClick={() => deleteSent(s.id)}
+                    className="p-2 rounded-full text-slate-400 hover:bg-slate-100 hover:text-red-600 shrink-0"
+                    aria-label="מחיקה מהיומן"
+                    title="מחיקה מהיומן"
+                  >
+                    <Trash2 size={16} />
+                  </button>
                 </div>
               );
             })}
