@@ -5,6 +5,7 @@ import Task from "@/lib/models/Task";
 import MonthlyReminder from "@/lib/models/MonthlyReminder";
 import WorkspaceMembership from "@/lib/models/WorkspaceMembership";
 import AppSettings from "@/lib/models/AppSettings";
+import NotificationLog from "@/lib/models/NotificationLog";
 import { sendPushToUsers } from "@/lib/push";
 import { DEFAULT_NOTIFICATION_TIME, israelNow } from "@/lib/israelTime";
 
@@ -30,7 +31,7 @@ export async function POST(req: NextRequest) {
 
   await connectToDatabase();
 
-  // ה-cron רץ כל 30 דקות. כל פריט נשלח בפעם הראשונה שהשעה הנוכחית (שעון ישראל) הגיעה
+  // ה-cron רץ בתדירות גבוהה (כל 5-30 דקות). כל פריט נשלח בפעם הראשונה שהשעה הנוכחית (שעון ישראל) הגיעה
   // לשעה שנקבעה לו באותו יום, ומסומן כ"נשלח" כדי שלא יישלח שוב.
   const { date: today, time: nowTime } = israelNow();
   await AppSettings.updateOne(
@@ -41,6 +42,7 @@ export async function POST(req: NextRequest) {
   const settings = await AppSettings.findOne({ key: "global" }).lean();
   const globalTime = settings?.notificationTime || DEFAULT_NOTIFICATION_TIME;
 
+  let sentCount = 0;
   const todayDay = Number(today.split("-")[2]);
   const approachingDate = addDays(today, APPROACHING_DAYS);
 
@@ -54,52 +56,65 @@ export async function POST(req: NextRequest) {
     membersByWorkspace.set(wsId, list);
   }
 
-  let sentCount = 0;
 
-  // התראות אוטומטיות (משימות/תאריכי יעד): פעם ביום, בשעה הגלובלית. "תופסים" את היום
-  // באופן אטומי כדי ששתי ריצות חופפות לא ישלחו פעמיים.
-  let runDaily = false;
-  if (nowTime >= globalTime) {
-    const claimed = await AppSettings.updateOne(
-      { key: "global", lastDailyRunDate: { $ne: today } },
-      { $set: { lastDailyRunDate: today } }
+  // כל פריט (משימה / תאריך יעד של מסמך / תזכורת חודשית) נשלח בפעם הראשונה שהשעה הנוכחית
+  // הגיעה לשעה שנקבעה לו (notifyTime, או השעה הגלובלית אם לא נקבעה), ומסומן כ"נשלח היום"
+  // באופן אטומי כדי שריצות חופפות לא ישלחו פעמיים. כל שליחה נרשמת ביומן ההתראות.
+  type Model = typeof Task | typeof DocumentModel | typeof MonthlyReminder;
+  async function claim(model: Model, id: unknown, field: "lastNotifiedOn" | "lastSentOn") {
+    const res = await (model as typeof Task).updateOne(
+      { _id: id, [field]: { $ne: today } },
+      { $set: { [field]: today } }
     );
-    runDaily = claimed.modifiedCount === 1;
+    return res.modifiedCount === 1;
+  }
+  async function notify(
+    workspaceId: string,
+    kind: "monthly" | "task" | "document",
+    payload: { title: string; body: string; url: string }
+  ) {
+    const members = membersByWorkspace.get(workspaceId) || [];
+    await sendPushToUsers(members, payload);
+    await NotificationLog.create({ workspaceId, kind, ...payload });
+    sentCount++;
   }
 
   // 1. משימות שהגיע/עבר תאריך היעד שלהן (ולא סומנו כבוצעו)
-  const overdueTasks = !runDaily
-    ? []
-    : await Task.find({
-        isDone: false,
-        dueDate: { $exists: true, $ne: null, $lte: today },
-      }).lean();
+  const overdueTasks = await Task.find({
+    isDone: false,
+    dueDate: { $exists: true, $ne: null, $lte: today },
+    lastNotifiedOn: { $ne: today },
+  }).lean();
+  let tasksSent = 0;
   for (const task of overdueTasks) {
-    const members = membersByWorkspace.get(task.workspaceId.toString()) || [];
-    const isToday = task.dueDate === today;
-    await sendPushToUsers(members, {
-      title: isToday ? "משימה להיום" : "משימה באיחור",
+    if (nowTime < (task.notifyTime || globalTime)) continue;
+    if (!(await claim(Task, task._id, "lastNotifiedOn"))) continue;
+    await notify(task.workspaceId.toString(), "task", {
+      title: task.dueDate === today ? "משימה להיום" : "משימה באיחור",
       body: task.title,
       url: "/tasks",
     });
-    sentCount++;
+    tasksSent++;
   }
 
   // 2. מסמכים עם תאריך יעד שהגיע היום, או מתקרב בעוד APPROACHING_DAYS ימים
-  const approachingDocs = !runDaily
-    ? []
-    : await DocumentModel.find({
-        dueDate: { $in: [today, approachingDate] },
-      }).lean();
+  const approachingDocs = await DocumentModel.find({
+    dueDate: { $in: [today, approachingDate] },
+    lastNotifiedOn: { $ne: today },
+  }).lean();
+  let docsSent = 0;
   for (const doc of approachingDocs) {
-    const members = membersByWorkspace.get(doc.workspaceId.toString()) || [];
-    const isToday = doc.dueDate === today;
-    await sendPushToUsers(members, {
-      title: isToday ? "תאריך יעד היום" : `תאריך יעד מתקרב (בעוד ${APPROACHING_DAYS} ימים)`,
+    if (nowTime < (doc.notifyTime || globalTime)) continue;
+    if (!(await claim(DocumentModel, doc._id, "lastNotifiedOn"))) continue;
+    await notify(doc.workspaceId.toString(), "document", {
+      title:
+        doc.dueDate === today
+          ? "תאריך יעד היום"
+          : `תאריך יעד מתקרב (בעוד ${APPROACHING_DAYS} ימים)`,
       body: doc.dueDateTitle || doc.title,
       url: `/documents/${doc._id}`,
     });
-    sentCount++;
+    docsSent++;
   }
 
   // 3. תזכורות חודשיות חוזרות שחל היום תורן שלהן
@@ -110,25 +125,19 @@ export async function POST(req: NextRequest) {
   let monthlySent = 0;
   for (const reminder of candidates) {
     if (nowTime < (reminder.time || globalTime)) continue;
-    const claimed = await MonthlyReminder.updateOne(
-      { _id: reminder._id, lastSentOn: { $ne: today } },
-      { $set: { lastSentOn: today } }
-    );
-    if (claimed.modifiedCount !== 1) continue;
-    const members = membersByWorkspace.get(reminder.workspaceId.toString()) || [];
-    await sendPushToUsers(members, {
+    if (!(await claim(MonthlyReminder, reminder._id, "lastSentOn"))) continue;
+    await notify(reminder.workspaceId.toString(), "monthly", {
       title: "תזכורת חודשית",
       body: reminder.title,
-      url: "/dashboard",
+      url: "/notifications",
     });
     monthlySent++;
-    sentCount++;
   }
 
   return NextResponse.json({
     today,
-    overdueTasks: overdueTasks.length,
-    approachingDocs: approachingDocs.length,
+    overdueTasks: tasksSent,
+    approachingDocs: docsSent,
     nowTime,
     globalTime,
     monthlyReminders: monthlySent,

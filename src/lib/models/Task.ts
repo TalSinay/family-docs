@@ -9,6 +9,8 @@ export interface ITask {
   workspaceId: mongoose.Types.ObjectId;
   title: string;
   dueDate?: string; // "YYYY-MM-DD", אופציונלי
+  notifyTime?: string; // "HH:MM" שעת ההתראה; ריק = השעה הגלובלית
+  lastNotifiedOn?: string; // "YYYY-MM-DD" - מונע התראה כפולה באותו יום
   isDone: boolean;
   color?: string; // hex, ראו src/lib/itemColors.ts - ריק = הצבע הקבוע הישן (סגול)
   createdBy: mongoose.Types.ObjectId;
@@ -19,6 +21,8 @@ const TaskSchema = new Schema<ITask>({
   workspaceId: { type: Schema.Types.ObjectId, ref: "Workspace", required: true },
   title: { type: String, required: true },
   dueDate: { type: String },
+  notifyTime: { type: String },
+  lastNotifiedOn: { type: String },
   isDone: { type: Boolean, default: false },
   color: { type: String },
   createdBy: { type: Schema.Types.ObjectId, ref: "User", required: true },

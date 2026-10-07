@@ -12,6 +12,7 @@ import {
   Smartphone,
   ShoppingCart,
   UserCircle,
+  Bell,
 } from "lucide-react";
 
 const ICONS: Record<string, React.ComponentType<{ size?: number; className?: string }>> = {
@@ -69,6 +70,16 @@ export default async function CategoriesPage() {
             <Smartphone size={22} />
           </div>
           <span className="font-medium">האפליקציות שלי</span>
+        </Link>
+
+        <Link
+          href="/notifications"
+          className="card p-5 flex flex-col items-center gap-2 hover:border-teal-300 transition-colors"
+        >
+          <div className="w-12 h-12 rounded-2xl bg-teal-50 text-teal-700 flex items-center justify-center">
+            <Bell size={22} />
+          </div>
+          <span className="font-medium">התראות</span>
         </Link>
 
         {showPersonalArea && (

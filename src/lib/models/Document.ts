@@ -36,6 +36,8 @@ export interface IDocument {
   // תאריך יעד אופציונלי (לדוגמה: מועד חידוש ביטוח) - כשמוגדר, מופיע ביומן בתאריך הזה
   dueDate?: string; // "YYYY-MM-DD"
   dueDateTitle?: string; // הכותרת שתוצג ביומן; אם ריק, מוצגת כותרת המסמך עצמו
+  notifyTime?: string; // "HH:MM" שעת ההתראה על תאריך היעד; ריק = השעה הגלובלית
+  lastNotifiedOn?: string; // "YYYY-MM-DD" - מונע התראה כפולה באותו יום
 
   amount?: number;
   isMonthlyPayment: boolean;
@@ -105,6 +107,8 @@ const DocumentSchema = new Schema<IDocument>({
 
   dueDate: { type: String },
   dueDateTitle: { type: String },
+  notifyTime: { type: String },
+  lastNotifiedOn: { type: String },
 
   amount: { type: Number },
   isMonthlyPayment: { type: Boolean, default: false },

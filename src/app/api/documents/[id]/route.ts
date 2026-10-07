@@ -5,6 +5,7 @@ import DocumentModel, { MAX_AMOUNT_HISTORY } from "@/lib/models/Document";
 import { overlayUploaderDisplayNames } from "@/lib/resolveDisplayNames";
 import { sanitizeAttachments } from "@/lib/attachments";
 import { numOrNull, sanitizeFinanceFields } from "@/lib/financeFields";
+import { isValidTime } from "@/lib/israelTime";
 
 export async function GET(
   req: NextRequest,
@@ -51,6 +52,7 @@ export async function PATCH(
     "subcategory",
     "dueDate",
     "dueDateTitle",
+    "notifyTime",
     "attachments",
     "fileId", // כדי לאפשר ניקוי קובץ הישן-הבודד (מסמכים שנוצרו לפני תמיכה ב-attachments)
   ];
@@ -60,6 +62,14 @@ export async function PATCH(
   }
   // "" נשלח כדי לנקות תאריך יעד קיים
   if (update.dueDate === "") update.dueDate = null;
+  if ("notifyTime" in update) {
+    if (update.notifyTime === "" || update.notifyTime === null) update.notifyTime = null;
+    else if (!isValidTime(update.notifyTime)) {
+      return NextResponse.json({ error: "שעה לא תקינה (פורמט HH:MM)" }, { status: 400 });
+    }
+  }
+  // שינוי תאריך/שעה מתזמן מחדש את ההתראה - מאפשרים לה להישלח שוב
+  if ("dueDate" in update || "notifyTime" in update) update.lastNotifiedOn = null;
 
   await connectToDatabase();
 
