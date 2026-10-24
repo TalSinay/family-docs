@@ -6,6 +6,8 @@ import { overlayUploaderDisplayNames } from "@/lib/resolveDisplayNames";
 import { sanitizeAttachments } from "@/lib/attachments";
 import { numOrNull, sanitizeFinanceFields } from "@/lib/financeFields";
 import { isValidTime } from "@/lib/israelTime";
+import SubCategory from "@/lib/models/SubCategory";
+import { MAIN_CATEGORIES } from "@/lib/categories";
 
 export async function GET(
   req: NextRequest,
@@ -50,6 +52,8 @@ export async function PATCH(
     "isMonthlyPayment",
     "monthlyAmount",
     "subcategory",
+    "category",
+    "uploadedAt",
     "dueDate",
     "dueDateTitle",
     "notifyTime",
@@ -60,6 +64,23 @@ export async function PATCH(
   for (const key of allowedFields) {
     if (key in body) update[key] = body[key];
   }
+  // שם: לא ריק
+  if ("title" in update) {
+    const t = String(update.title ?? "").trim();
+    if (!t) return NextResponse.json({ error: "השם לא יכול להיות ריק" }, { status: 400 });
+    update.title = t;
+  }
+  // קטגוריה: רק קטגוריה ראשית מוכרת
+  if ("category" in update && !(MAIN_CATEGORIES as readonly string[]).includes(String(update.category))) {
+    return NextResponse.json({ error: "קטגוריה לא מוכרת" }, { status: 400 });
+  }
+  // תאריך הרשומה (למשל תאריך הוצאה): תאריך תקין שאינו בעתיד הרחוק
+  if ("uploadedAt" in update) {
+    const t = Date.parse(String(update.uploadedAt));
+    if (Number.isNaN(t) || t > Date.now() + 36 * 3600 * 1000) delete update.uploadedAt;
+    else update.uploadedAt = new Date(t);
+  }
+  if ("subcategory" in update) update.subcategory = String(update.subcategory ?? "").trim() || null;
   // "" נשלח כדי לנקות תאריך יעד קיים
   if (update.dueDate === "") update.dueDate = null;
   if ("notifyTime" in update) {
@@ -98,12 +119,26 @@ export async function PATCH(
   // זו הפעם הראשונה), כדי להציג "שינוי מהעדכון הקודם". שדות פיננסים ייעודיים
   // נשמרים רק לרשומות בקטגוריית פיננסים.
   let historyPush: Record<string, unknown> | undefined;
-  if ("amount" in update || Object.keys(finance).length) {
+  if ("amount" in update || "category" in update || "subcategory" in update || Object.keys(finance).length) {
     const existing = await DocumentModel.findOne({ _id: id, workspaceId }).select(
       "category isBank amount amountHistory uploadedAt"
     );
-    // יתרת הבנק מנוהלת רק דרך /api/bank (מצב ידני/אוטומטי)
-    if (existing?.isBank) delete update.amount;
+    // יתרת הבנק מנוהלת רק דרך /api/bank (מצב ידני/אוטומטי); גם הקטגוריה שלה קבועה
+    if (existing?.isBank) {
+      delete update.amount;
+      delete update.category;
+    }
+    // תת-קטגוריה חדשה נשמרת לרשימה, כמו ביצירה
+    if (typeof update.subcategory === "string" && update.subcategory) {
+      const cat = String(update.category ?? existing?.category ?? "");
+      if (cat) {
+        await SubCategory.updateOne(
+          { workspaceId, category: cat, name: update.subcategory },
+          { $setOnInsert: { workspaceId, category: cat, name: update.subcategory } },
+          { upsert: true }
+        );
+      }
+    }
     if (existing && existing.category === "פיננסים") {
       Object.assign(update, finance);
       if (existing.isBank) {

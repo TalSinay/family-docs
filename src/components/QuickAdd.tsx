@@ -339,7 +339,7 @@ function QuickAddResult({
     setPhase("saving");
     try {
       if (result.kind === "expense" || result.kind === "income") {
-        await call("/api/documents", "POST", {
+        const created = await call("/api/documents", "POST", {
           title: title.trim(),
           category,
           subcategory: sub.trim() || undefined,
@@ -348,21 +348,21 @@ function QuickAddResult({
           uploadedAt: new Date(`${date}T12:00:00`).toISOString(),
         });
         setMessage(`${result.kind === "expense" ? "ההוצאה" : "ההכנסה"} נשמרה`);
-        setLink({ href: `/category/${encodeURIComponent(category)}`, label: `פתח ${category}` });
+        setLink({ href: `/documents/${created._id}`, label: "פתח לעריכה" });
       } else if (result.kind === "task") {
         const task = await call("/api/tasks", "POST", { title: title.trim(), dueDate: date });
         if (time) await call(`/api/tasks/${task._id}`, "PATCH", { notifyTime: time });
         setMessage("המשימה נוצרה");
         setLink({ href: "/tasks", label: "פתח משימות" });
       } else if (result.kind === "document") {
-        await call("/api/documents", "POST", {
+        const created = await call("/api/documents", "POST", {
           title: title.trim(),
           category,
           amount: amount !== "" ? amountNum : undefined,
           dueDate: dueDocDate || undefined,
         });
         setMessage("המסמך נוסף");
-        setLink({ href: `/category/${encodeURIComponent(category)}`, label: `פתח ${category}` });
+        setLink({ href: `/documents/${created._id}`, label: "פתח לעריכה" });
       } else if (result.kind === "monthly") {
         await call("/api/monthly-reminders", "POST", { title: title.trim(), dayOfMonth: dayNum, time: time || undefined });
         setMessage("התזכורת החודשית נוצרה");

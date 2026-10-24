@@ -14,7 +14,7 @@ import {
   FileText,
 } from "lucide-react";
 import { formatDateTime, formatCurrency, formatFileSize } from "@/lib/format";
-import { FINANCIAL_CATEGORIES } from "@/lib/categories";
+import { FINANCIAL_CATEGORIES, MAIN_CATEGORIES } from "@/lib/categories";
 import {
   FinanceFieldsInputs,
   FinanceFormValues,
@@ -62,6 +62,13 @@ type DocData = {
   lastOpenedAt: string;
 };
 
+// תאריך מקומי (YYYY-MM-DD) של חותמת זמן, בלי new Date("YYYY-MM-DD") שמפרש כ-UTC
+function localDateStr(iso: string): string {
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return "";
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+}
+
 const MAX_FILE_SIZE = 11 * 1024 * 1024;
 
 export function DocumentDetail({ doc: initialDoc }: { doc: DocData }) {
@@ -85,6 +92,15 @@ export function DocumentDetail({ doc: initialDoc }: { doc: DocData }) {
   });
   const [dueDate, setDueDate] = useState(initialDoc.dueDate || "");
   const [dueDateTitle, setDueDateTitle] = useState(initialDoc.dueDateTitle || "");
+  // עריכת פרטי הרשומה: שם, קטגוריה, תת-קטגוריה, סכום ותאריך
+  const [titleInput, setTitleInput] = useState(initialDoc.title);
+  const [categoryInput, setCategoryInput] = useState(initialDoc.category);
+  const [subInput, setSubInput] = useState(initialDoc.subcategory || "");
+  const [plainAmount, setPlainAmount] = useState(
+    typeof initialDoc.amount === "number" ? String(initialDoc.amount) : ""
+  );
+  const originalDate = localDateStr(initialDoc.uploadedAt);
+  const [recordDate, setRecordDate] = useState(originalDate);
   const [saving, setSaving] = useState(false);
   const [savedMsg, setSavedMsg] = useState("");
   const [uploadingFiles, setUploadingFiles] = useState(false);
@@ -173,7 +189,22 @@ export function DocumentDetail({ doc: initialDoc }: { doc: DocData }) {
   async function handleSave() {
     setSaving(true);
     setSavedMsg("");
+    if (!titleInput.trim()) {
+      setSaving(false);
+      setSavedMsg("השם לא יכול להיות ריק");
+      setTimeout(() => setSavedMsg(""), 2500);
+      return;
+    }
     const ok = await patch({
+      title: titleInput.trim(),
+      ...(doc.isBank ? {} : { category: categoryInput }),
+      subcategory: subInput.trim(),
+      // תאריך נשלח רק אם שונה, כדי לא לדרוס את שעת היצירה המקורית
+      ...(recordDate && recordDate !== originalDate
+        ? { uploadedAt: new Date(`${recordDate}T12:00:00`).toISOString() }
+        : {}),
+      // סכום לכל רשומה שאינה בקטגוריית פיננסים (בפיננסים הוא נערך בבלוק הייעודי)
+      ...(!isFinanceCategory ? { amount: plainAmount.trim() === "" ? null : Number(plainAmount) } : {}),
       notes,
       customFields: customFields.filter((cf) => cf.key.trim()),
       isMonthlyPayment,
@@ -323,6 +354,55 @@ export function DocumentDetail({ doc: initialDoc }: { doc: DocData }) {
             }}
           />
         </label>
+      </div>
+
+      <div className="card p-5 space-y-3">
+        <h2 className="font-semibold">פרטי הרשומה</h2>
+        <div>
+          <label className="label">שם</label>
+          <input className="input" value={titleInput} onChange={(e) => setTitleInput(e.target.value)} />
+        </div>
+        <div className="grid grid-cols-2 gap-3">
+          <div>
+            <label className="label">קטגוריה</label>
+            <select
+              className="input"
+              value={categoryInput}
+              disabled={!!doc.isBank}
+              onChange={(e) => setCategoryInput(e.target.value)}
+            >
+              {MAIN_CATEGORIES.map((c) => (
+                <option key={c} value={c}>
+                  {c}
+                </option>
+              ))}
+            </select>
+          </div>
+          <div>
+            <label className="label">תת-קטגוריה</label>
+            <input className="input" value={subInput} onChange={(e) => setSubInput(e.target.value)} />
+          </div>
+        </div>
+        <div className="grid grid-cols-2 gap-3">
+          {!isFinanceCategory && (
+            <div>
+              <label className="label">סכום (₪)</label>
+              <input
+                type="number"
+                step="0.01"
+                inputMode="decimal"
+                className="input"
+                value={plainAmount}
+                onChange={(e) => setPlainAmount(e.target.value)}
+              />
+            </div>
+          )}
+          <div>
+            <label className="label">{doc.category === "הוצאות" || doc.category === "הכנסות" ? "תאריך" : "תאריך הוספה"}</label>
+            <input type="date" className="input" value={recordDate} onChange={(e) => setRecordDate(e.target.value)} />
+          </div>
+        </div>
+        <p className="text-xs text-slate-400">השינויים נשמרים בלחיצה על &quot;שמור&quot; בתחתית העמוד.</p>
       </div>
 
       <div className="card p-5">
