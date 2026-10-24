@@ -1,4 +1,4 @@
-import { DEFAULT_DICTIONARY, DOC_CATEGORY_WORDS } from "./dictionary";
+import { DEFAULT_DICTIONARY } from "./dictionary";
 import { Dictionary, Highlight, HighlightKind, Intent, ParseResult } from "./types";
 
 // ---------- עזרי טקסט ----------
@@ -112,7 +112,9 @@ function numberValue(norm: string): number | null {
 const NUMBER_WORDS: Record<string, number> = { מאה: 100, מאתיים: 200, אלף: 1000, אלפיים: 2000 };
 const CURRENCY = new Set(["₪", "שח", "שקל", "שקלים", "שקלים", "ש״ח"]);
 
-const STOPWORDS = new Set(["על", "את", "של", "לי", "אני", "גם", "עוד", "עם", "כדי", "זה", "זו", "ה", "ו", "ב", "ל", "מ", "ש", "אל", "מן"]);
+const ADD_VERBS = new Set(["הוסף", "הוסיפי", "תוסיף", "תוסיפי", "תכניס", "תכניסי", "צור", "תיצור", "תיצרי", "פתח", "תפתח"]);
+
+const STOPWORDS = new Set([...ADD_VERBS, "על", "את", "של", "לי", "אני", "גם", "עוד", "עם", "כדי", "זה", "זו", "ה", "ו", "ב", "ל", "מ", "ש", "אל", "מן"]);
 
 // ---------- פענוח ----------
 
@@ -340,6 +342,42 @@ export function parse(
   });
 
   // --- קטגוריה ---
+  // קטגוריית מסמך ראשית לפי מילה ("ביטוח" ← ביטוחים, "קרן השתלמות" ← פיננסים)
+  const docPhrases = dict.docCategoryWords
+    .map((c) => ({ ws: normalizeWord(c.word).split(/\s+/).filter(Boolean), cat: c.category, word: c.word }))
+    .sort((a, b) => b.ws.length - a.ws.length);
+  const findDocCategory = (doClaim: boolean): { category: string; word: string } | undefined => {
+    for (let i = 0; i < tokens.length; i++) {
+      if (!free(i)) continue;
+      for (const c of docPhrases) {
+        if (i + c.ws.length > tokens.length) continue;
+        if (c.ws.every((w, k) => free(i + k) && variants(tokens[i + k].norm).includes(w))) {
+          if (doClaim) for (let k = 0; k < c.ws.length; k++) claim(i + k, "cat");
+          return { category: c.cat, word: tokens.slice(i, i + c.ws.length).map((t) => t.raw).join(" ") };
+        }
+      }
+    }
+    return undefined;
+  };
+
+  let guessed = false;
+  let docFound: { category: string; word: string } | undefined;
+  let altCategory: { category: string; word: string } | undefined;
+  if (intent === "document") {
+    docFound = findDocCategory(true);
+  } else if (intent === null) {
+    // אין מילת כוונה, אבל יש מילה שמעידה על קטגוריה ("ביטוח רכב", "קרן השתלמות 80,000")
+    docFound = findDocCategory(true);
+    if (docFound) {
+      intent = "document";
+      guessed = true;
+    }
+  } else if (isMoney) {
+    // בהוצאה/הכנסה הקטגוריה נשארת הוצאות/הכנסות, אבל מציעים לשייך לקטגוריה שזוהתה
+    altCategory = findDocCategory(false);
+  }
+
+  // תת-קטגוריה להוצאה/הכנסה לפי מילון נרדפות ("דלק" ← רכב)
   let subcategory: string | undefined;
   const catPhrases = dict.categoryWords
     .map((c) => ({ ws: normalizeWord(c.word).split(/\s+/).filter(Boolean), sub: c.subcategory }))
@@ -358,27 +396,7 @@ export function parse(
     }
   }
 
-  // קטגוריית מסמך ("זיכוי" ← זיכויים) בכוונת "מסמך חדש"
-  let docCategory: string | undefined;
-  if (intent === "document") {
-    const docPhrases = DOC_CATEGORY_WORDS.map((c) => ({ ws: normalizeWord(c.word).split(/\s+/), cat: c.category })).sort(
-      (a, b) => b.ws.length - a.ws.length
-    );
-    outerDoc: for (let i = 0; i < tokens.length; i++) {
-      if (!free(i)) continue;
-      for (const c of docPhrases) {
-        if (i + c.ws.length > tokens.length) continue;
-        if (c.ws.every((w, k) => free(i + k) && variants(tokens[i + k].norm).includes(w))) {
-          docCategory = c.cat;
-          for (let k = 0; k < c.ws.length; k++) claim(i + k, "cat");
-          break outerDoc;
-        }
-      }
-    }
-  }
-
   // אין מילת כוונה מוכרת: מנחשים לפי מה שזוהה, ומסמנים כניחוש כדי שהמשתמש יוכל ללמד את המילון
-  let guessed = false;
   if (intent === null && amount !== undefined) {
     intent = "expense";
     guessed = true;
@@ -428,7 +446,7 @@ export function parse(
   const trimLead = (arr: Token[]) => {
     // בכותרת מורידים מילות קישור בקצוות ("את" בהתחלה, "של"/"על" בסוף)
     const a = [...arr];
-    while (a.length && ["את", "ש", "ל", "ו"].includes(a[0].norm)) a.shift();
+    while (a.length && (["את", "ש", "ל", "ו"].includes(a[0].norm) || ADD_VERBS.has(a[0].norm))) a.shift();
     while (a.length && ["של", "על", "את", "ל", "ב", "עם"].includes(a[a.length - 1].norm)) a.pop();
     return a;
   };
@@ -442,7 +460,8 @@ export function parse(
       confidence: !docTitle ? "low" : guessed ? "medium" : "high",
       title: docTitle,
       amount,
-      docCategory: docCategory ?? "כללי",
+      category: docFound?.category ?? "כללי",
+      categoryWord: docFound?.word,
     };
   }
 
@@ -456,6 +475,8 @@ export function parse(
       title: title || subcategory || (intent === "expense" ? "הוצאה" : "הכנסה"),
       amount,
       subcategory,
+      category: intent === "expense" ? "הוצאות" : "הכנסות",
+      altCategory: altCategory && altCategory.category !== (intent === "expense" ? "הוצאות" : "הכנסות") ? altCategory : undefined,
       date: date ?? today,
       ...(date ? {} : { notes: [...notes, "תאריך לא זוהה, נקבע להיום"] }),
     };
@@ -493,7 +514,9 @@ function unknownWordsOf(tokens: Token[], contentIdx: number[], claims: Map<numbe
 // תחילת המשפט שלא זוהתה (עד שתי מילים) - מה שכדאי ללמד את המילון, למשל "יש לי"
 function leadPhraseOf(tokens: Token[], claims: Map<number, HighlightKind>): string | undefined {
   const out: string[] = [];
-  for (let i = 0; i < Math.min(2, tokens.length); i++) {
+  let start = 0;
+  while (start < tokens.length && ADD_VERBS.has(tokens[start].norm)) start++;
+  for (let i = start; i < Math.min(start + 2, tokens.length); i++) {
     if (claims.get(i) !== undefined) break;
     out.push(tokens[i].raw);
   }
@@ -523,8 +546,10 @@ function splitItems(tokens: Token[], contentIdx: number[], text: string): string
   const toks = contentIdx.map((i) => tokens[i]).filter((t) => !STOPWORDS.has(t.norm) && t.norm !== "תוסיף" && t.norm !== "הוסף" && t.norm !== "תוסיפי" && t.norm !== "תביא" && t.norm !== "לקנות");
   if (!toks.length) return [];
   const hasSeparators = toks.some((t, i) => i < toks.length - 1 && /[,،]/.test(text.slice(t.end, t.end + 1))) || toks.some((t, i) => i > 0 && t.norm.length > 2 && t.norm.startsWith("ו"));
+  // "נגמר החלב" ← "חלב": מורידים ה' הידיעה מתחילת פריט
+  const clean = (w: string) => (w.length >= 4 && w.startsWith("ה") ? w.slice(1) : w);
   if (!hasSeparators) {
-    return toks.length <= 2 ? [toks.map((t) => t.raw).join(" ")] : toks.map((t) => t.raw);
+    return toks.length <= 2 ? [toks.map((t) => clean(t.raw)).join(" ")] : toks.map((t) => clean(t.raw));
   }
   const items: string[] = [];
   let cur: string[] = [];
@@ -535,7 +560,7 @@ function splitItems(tokens: Token[], contentIdx: number[], text: string): string
       cur = [];
       w = w.slice(1);
     }
-    cur.push(w);
+    cur.push(i === 0 || cur.length === 0 ? clean(w) : w);
     if (/[,،]/.test(text.slice(t.end, t.end + 1))) {
       items.push(cur.join(" "));
       cur = [];

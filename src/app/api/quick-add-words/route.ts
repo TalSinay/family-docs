@@ -3,6 +3,7 @@ import { requireWorkspace } from "@/lib/requireWorkspace";
 import { connectToDatabase } from "@/lib/mongodb";
 import QuickAddWord from "@/lib/models/QuickAddWord";
 import { normalizeWord } from "@/lib/quickAdd/parse";
+import { MAIN_CATEGORIES } from "@/lib/categories";
 
 const INTENTS = ["expense", "income", "task", "reminder", "shopping", "question", "document"];
 const MAX_WORDS_PER_WORKSPACE = 500;
@@ -12,25 +13,33 @@ export async function GET() {
   const { workspaceId, error } = await requireWorkspace();
   if (error) return error;
   await connectToDatabase();
-  const words = await QuickAddWord.find({ workspaceId }).select("word intent").lean();
+  const words = await QuickAddWord.find({ workspaceId }).select("word intent category").lean();
   return NextResponse.json(
-    words.map((w) => ({ id: String(w._id), word: w.word, intent: w.intent }))
+    words.map((w) => ({ id: String(w._id), word: w.word, intent: w.intent, category: w.category }))
   );
 }
 
-// לימוד מילה/ביטוי: { word, intent }. אם הביטוי כבר קיים, הכוונה שלו מתעדכנת.
+// לימוד מילה/ביטוי: { word, intent? , category? } - כוונה ו/או קטגוריית מסמך. אם הביטוי
+// כבר קיים, הערכים שלו מתעדכנים.
 export async function POST(req: NextRequest) {
   const { session, workspaceId, error } = await requireWorkspace();
   if (error) return error;
 
   const body = await req.json();
   const word = normalizeWord(String(body.word ?? "")).replace(/\s+/g, " ").trim();
-  const intent = String(body.intent ?? "");
+  const intent = body.intent ? String(body.intent) : "";
+  const category = body.category ? String(body.category) : "";
   if (!word || word.length > 40 || word.split(" ").length > 3) {
     return NextResponse.json({ error: "ביטוי לא תקין (עד 3 מילים)" }, { status: 400 });
   }
-  if (!INTENTS.includes(intent)) {
+  if (!intent && !category) {
+    return NextResponse.json({ error: "חסרה כוונה או קטגוריה" }, { status: 400 });
+  }
+  if (intent && !INTENTS.includes(intent)) {
     return NextResponse.json({ error: "כוונה לא מוכרת" }, { status: 400 });
+  }
+  if (category && !(MAIN_CATEGORIES as readonly string[]).includes(category)) {
+    return NextResponse.json({ error: "קטגוריה לא מוכרת" }, { status: 400 });
   }
 
   await connectToDatabase();
@@ -42,8 +51,8 @@ export async function POST(req: NextRequest) {
 
   const doc = await QuickAddWord.findOneAndUpdate(
     { workspaceId, word },
-    { $set: { intent }, $setOnInsert: { workspaceId, word, createdBy: session!.user.id } },
+    { $set: { ...(intent ? { intent } : {}), ...(category ? { category } : {}) }, $setOnInsert: { workspaceId, word, createdBy: session!.user.id } },
     { upsert: true, new: true }
   );
-  return NextResponse.json({ id: String(doc._id), word: doc.word, intent: doc.intent }, { status: 201 });
+  return NextResponse.json({ id: String(doc._id), word: doc.word, intent: doc.intent, category: doc.category }, { status: 201 });
 }

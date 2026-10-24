@@ -8,6 +8,7 @@ import { Modal } from "./Modal";
 import { parse } from "@/lib/quickAdd/parse";
 import { DEFAULT_DICTIONARY, mergeDictionary, CustomDictionaryEntry } from "@/lib/quickAdd/dictionary";
 import { MAIN_CATEGORIES } from "@/lib/categories";
+import { interpretMeaning } from "@/lib/quickAdd/meaning";
 import { suggest, loadHistory, rememberInput } from "@/lib/quickAdd/suggest";
 import type { Dictionary, Highlight, HighlightKind, Intent, ParseResult } from "@/lib/quickAdd/types";
 
@@ -57,7 +58,7 @@ function Highlighted({ text, highlights }: { text: string; highlights: Highlight
   const used = Array.from(new Set(highlights.map((h) => h.kind)));
   return (
     <div>
-      <div className="card p-3.5 text-base leading-9">{parts}</div>
+      <div className="card p-3.5 text-base leading-9 break-words">{parts}</div>
       {used.length > 0 && (
         <div className="flex flex-wrap gap-1.5 mt-2 text-[11px]">
           {used.map((k) => (
@@ -107,8 +108,8 @@ export function QuickAddInput() {
     // מילים שהמשפחה לימדה (מתמזגות על מילון ברירת המחדל)
     fetch("/api/quick-add-words")
       .then((r) => (r.ok ? r.json() : []))
-      .then((list: { word: string; intent: Intent }[]) =>
-        setCustomWords(Array.isArray(list) ? list.map((w) => ({ word: w.word, intent: w.intent })) : [])
+      .then((list: { word: string; intent?: Intent; category?: string }[]) =>
+        setCustomWords(Array.isArray(list) ? list.map((w) => ({ word: w.word, intent: w.intent, category: w.category })) : [])
       )
       .catch(() => {});
   }, []);
@@ -179,7 +180,7 @@ export function QuickAddInput() {
             onBlur={() => setFocused(false)}
             placeholder="שאל, הוסף או חפש..."
             enterKeyHint="send"
-            className="flex-1 min-w-0 bg-transparent outline-none text-[15px] placeholder:text-slate-400"
+            className="flex-1 min-w-0 bg-transparent outline-none text-base placeholder:text-slate-400"
           />
           {text.trim() && (
             <button
@@ -239,7 +240,9 @@ function QuickAddResult({
   const [day, setDay] = useState(initial.dayOfMonth !== undefined ? String(initial.dayOfMonth) : "1");
   const [sub, setSub] = useState(initial.subcategory ?? "");
   const [dueDocDate, setDueDocDate] = useState(initial.kind === "document" && initial.date ? initial.date : "");
-  const [docCat, setDocCat] = useState(initial.docCategory ?? "כללי");
+  const [category, setCategory] = useState(initial.category ?? "כללי");
+  const [teachWord, setTeachWord] = useState("");
+  const [manualMeaning, setManualMeaning] = useState("");
   const [taught, setTaught] = useState<{ id: string; word: string; label: string } | null>(null);
   const [itemsText, setItemsText] = useState((initial.items ?? []).join(", "));
   const [phase, setPhase] = useState<Phase>("edit");
@@ -248,7 +251,7 @@ function QuickAddResult({
 
   function applyResult(r: ParseResult) {
     setResult(r);
-    setDocCat(r.docCategory ?? "כללי");
+    setCategory(r.category ?? "כללי");
     setDueDocDate(r.kind === "document" && r.date ? r.date : "");
     setTitle(r.title);
     setAmount(r.amount !== undefined ? String(r.amount) : "");
@@ -263,24 +266,41 @@ function QuickAddResult({
     applyResult(parse(text, today, dict, intent));
   }
 
-  // לימוד ביטוי: שומרים במילון של המשפחה ומפענחים מחדש עם המילון המעודכן
-  async function teach(intent: Intent) {
-    const phrase = result.leadPhrase;
+  // מועמדים ללימוד: תחילת המשפט שלא זוהתה, ובנוסף כל מילה אחרת שלא זוהתה
+  const candidates = Array.from(new Set([result.leadPhrase, ...(result.unknownWords ?? [])].filter((x): x is string => !!x))).slice(0, 6);
+  const wordToTeach = teachWord && candidates.includes(teachWord) ? teachWord : candidates[0] ?? "";
+
+  // לימוד ביטוי (כוונה ו/או קטגוריה): שומרים במילון של המשפחה ומפענחים מחדש עם המילון המעודכן
+  async function teach(meaning: { intent?: Intent; category?: string }) {
+    const phrase = wordToTeach;
     if (!phrase) return;
     try {
       const res = await fetch("/api/quick-add-words", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ word: phrase, intent }),
+        body: JSON.stringify({ word: phrase, ...meaning }),
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || "הלימוד נכשל");
-      onTaught({ word: data.word, intent });
-      setTaught({ id: data.id, word: data.word, label: INTENT_LABEL[intent] });
-      applyResult(parse(text, today, mergeDictionary(dict, [{ word: data.word, intent }]), undefined));
+      const entry = { word: data.word as string, ...meaning };
+      onTaught(entry);
+      const label = meaning.intent ? INTENT_LABEL[meaning.intent] : `קטגוריה ${meaning.category}`;
+      setTaught({ id: data.id, word: data.word, label });
+      setManualMeaning("");
+      applyResult(parse(text, today, mergeDictionary(dict, [entry]), undefined));
     } catch (e) {
       setMessage(e instanceof Error ? e.message : "הלימוד נכשל");
     }
+  }
+
+  function teachManual() {
+    const m = interpretMeaning(manualMeaning, dict);
+    if (!m) {
+      setMessage("לא זיהיתי. נסה: הוצאה, הכנסה, מסמך חדש, משימה, תזכורת, קניות, שאלה, או שם קטגוריה (למשל ביטוחים).");
+      return;
+    }
+    setMessage("");
+    teach(m);
   }
 
   async function untaught() {
@@ -319,7 +339,6 @@ function QuickAddResult({
     setPhase("saving");
     try {
       if (result.kind === "expense" || result.kind === "income") {
-        const category = result.kind === "expense" ? "הוצאות" : "הכנסות";
         await call("/api/documents", "POST", {
           title: title.trim(),
           category,
@@ -338,12 +357,12 @@ function QuickAddResult({
       } else if (result.kind === "document") {
         await call("/api/documents", "POST", {
           title: title.trim(),
-          category: docCat,
+          category,
           amount: amount !== "" ? amountNum : undefined,
           dueDate: dueDocDate || undefined,
         });
         setMessage("המסמך נוסף");
-        setLink({ href: `/category/${encodeURIComponent(docCat)}`, label: `פתח ${docCat}` });
+        setLink({ href: `/category/${encodeURIComponent(category)}`, label: `פתח ${category}` });
       } else if (result.kind === "monthly") {
         await call("/api/monthly-reminders", "POST", { title: title.trim(), dayOfMonth: dayNum, time: time || undefined });
         setMessage("התזכורת החודשית נוצרה");
@@ -368,11 +387,37 @@ function QuickAddResult({
     }
   }
 
+  // אישור קטגוריה לפני יצירה: ברירת מחדל לפי הזיהוי, אפשר לשנות
+  const categoryField = (
+    <div>
+      <label className="label">קטגוריה</label>
+      <select className="input" value={category} onChange={(e) => setCategory(e.target.value)}>
+        {MAIN_CATEGORIES.map((c) => (
+          <option key={c} value={c}>
+            {c}
+          </option>
+        ))}
+      </select>
+      {result.categoryWord && category === result.category && (
+        <p className="text-xs text-slate-500 mt-1">זוהה לפי: {result.categoryWord}</p>
+      )}
+      {result.altCategory && result.altCategory.category !== category && (
+        <button
+          type="button"
+          onClick={() => setCategory(result.altCategory!.category)}
+          className="mt-1.5 text-xs text-teal-800 font-medium underline"
+        >
+          זוהה &quot;{result.altCategory.word}&quot;, לשייך ל{result.altCategory.category}?
+        </button>
+      )}
+    </div>
+  );
+
   const title0 = result.kind === "unknown" ? "לא בטוח מה התכוונת" : KIND_LABEL[result.kind];
 
   return (
     <Modal open onClose={() => onClose(phase === "done")} title={title0}>
-      <div className="space-y-4">
+      <div className="space-y-4 min-w-0">
         <Highlighted text={text} highlights={result.highlights} />
 
         {result.kind === "question" && <QuestionAnswer result={result} today={today} onClose={() => onClose(false)} />}
@@ -419,6 +464,7 @@ function QuickAddResult({
                 <input type="date" className="input" value={date} onChange={(e) => setDate(e.target.value)} />
               </div>
             </div>
+            {categoryField}
             <div>
               <label className="label">תת-קטגוריה (אופציונלי)</label>
               <input className="input" value={sub} onChange={(e) => setSub(e.target.value)} />
@@ -470,21 +516,10 @@ function QuickAddResult({
               <label className="label">שם המסמך</label>
               <input className="input" value={title} onChange={(e) => setTitle(e.target.value)} />
             </div>
-            <div className="grid grid-cols-2 gap-3">
-              <div>
-                <label className="label">קטגוריה</label>
-                <select className="input" value={docCat} onChange={(e) => setDocCat(e.target.value)}>
-                  {MAIN_CATEGORIES.map((c) => (
-                    <option key={c} value={c}>
-                      {c}
-                    </option>
-                  ))}
-                </select>
-              </div>
-              <div>
-                <label className="label">סכום (אופציונלי)</label>
-                <input className="input" inputMode="decimal" value={amount} onChange={(e) => setAmount(e.target.value)} />
-              </div>
+            {categoryField}
+            <div>
+              <label className="label">סכום (אופציונלי)</label>
+              <input className="input" inputMode="decimal" value={amount} onChange={(e) => setAmount(e.target.value)} />
             </div>
             <div>
               <label className="label">תאריך יעד (אופציונלי)</label>
@@ -511,21 +546,71 @@ function QuickAddResult({
           </div>
         )}
 
-        {!taught && phase === "edit" && result.leadPhrase && (result.guessed || result.kind === "unknown") && (
-          <div className="space-y-2">
-            <p className="text-xs font-bold text-slate-500">
-              מה <span className="text-slate-800">&quot;{result.leadPhrase}&quot;</span> אומר כאן? אזכור לפעם הבאה
-            </p>
-            <div className="flex flex-wrap gap-2">
-              {(["document", "expense", "income", "task", "shopping", "question"] as Intent[]).map((i) => (
-                <button
-                  key={i}
-                  onClick={() => teach(i)}
-                  className="rounded-full border border-slate-300 bg-white px-3.5 py-1.5 text-sm hover:border-teal-400"
-                >
-                  {INTENT_LABEL[i]}
+        {!taught && phase === "edit" && candidates.length > 0 && (result.guessed || result.kind === "unknown") && (
+          <div className="card p-3.5 space-y-3 bg-slate-50">
+            <p className="text-xs font-bold text-slate-600">לא הכרתי חלק מהמשפט. מה המשמעות? אזכור לפעם הבאה</p>
+            <div>
+              <p className="text-[11px] text-slate-500 mb-1.5">המילה / הביטוי</p>
+              <div className="flex flex-wrap gap-1.5">
+                {candidates.map((c) => (
+                  <button
+                    key={c}
+                    type="button"
+                    onClick={() => setTeachWord(c)}
+                    className={`rounded-full px-3 py-1 text-sm border ${
+                      c === wordToTeach ? "bg-teal-700 text-white border-teal-700" : "bg-white border-slate-300"
+                    }`}
+                  >
+                    {c}
+                  </button>
+                ))}
+              </div>
+            </div>
+            <div>
+              <p className="text-[11px] text-slate-500 mb-1.5">
+                &quot;{wordToTeach}&quot; אומר...
+              </p>
+              <div className="flex flex-wrap gap-1.5">
+                {(["document", "expense", "income", "task", "reminder", "shopping", "question"] as Intent[]).map((i) => (
+                  <button
+                    key={i}
+                    type="button"
+                    onClick={() => teach({ intent: i })}
+                    className="rounded-full border border-slate-300 bg-white px-3 py-1 text-sm hover:border-teal-400"
+                  >
+                    {INTENT_LABEL[i]}
+                  </button>
+                ))}
+              </div>
+            </div>
+            <div>
+              <p className="text-[11px] text-slate-500 mb-1.5">או שייך לקטגוריה</p>
+              <select
+                className="input"
+                value=""
+                onChange={(e) => e.target.value && teach({ category: e.target.value })}
+              >
+                <option value="">בחר קטגוריה...</option>
+                {MAIN_CATEGORIES.map((c) => (
+                  <option key={c} value={c}>
+                    {c}
+                  </option>
+                ))}
+              </select>
+            </div>
+            <div>
+              <p className="text-[11px] text-slate-500 mb-1.5">או כתוב בעצמך מה זה אומר</p>
+              <div className="flex gap-2">
+                <input
+                  className="input min-w-0"
+                  value={manualMeaning}
+                  onChange={(e) => setManualMeaning(e.target.value)}
+                  placeholder="למשל: הוצאה, מסמך חדש, ביטוחים"
+                />
+                <button type="button" onClick={teachManual} disabled={!manualMeaning.trim()} className="btn-primary shrink-0">
+                  למד
                 </button>
-              ))}
+              </div>
             </div>
           </div>
         )}
@@ -537,7 +622,7 @@ function QuickAddResult({
           <p className="text-xs text-amber-700">לא הייתי בטוח לגמרי, כדאי לבדוק את השדות לפני שמירה.</p>
         )}
 
-        {phase === "error" && <p className="text-sm text-red-600">{message}</p>}
+        {(phase === "error" || (phase === "edit" && message)) && <p className="text-sm text-red-600">{message}</p>}
 
         {phase === "done" && (
           <div className="space-y-3">

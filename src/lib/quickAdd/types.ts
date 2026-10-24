@@ -21,7 +21,9 @@ export type ParseResult = {
   items?: string[]; // לקניות
   searchQuery?: string; // לשאלות
   questionType?: "when" | "howMuch" | "other";
-  docCategory?: string; // לקובץ חדש: קטגוריית המסמך
+  category?: string; // קטגוריה ראשית מוצעת (הוצאות/הכנסות/ביטוחים/...), לאישור המשתמש
+  categoryWord?: string; // המילה בטקסט שממנה זוהתה הקטגוריה
+  altCategory?: { category: string; word: string }; // קטגוריה חלופית שזוהתה (למשל "ביטוח" בתוך הוצאה)
   leadPhrase?: string; // תחילת המשפט שלא זוהתה, מועמדת ללימוד ("יש לי")
   guessed?: boolean; // אין מילת כוונה מוכרת, הסוג נוחש לפי סכום/תאריך
   unknownWords?: string[]; // מילים שלא זוהו, מועמדות ללימוד במילון
@@ -30,7 +32,10 @@ export type ParseResult = {
 
 export type CategoryWord = { word: string; subcategory: string };
 
+export type DocCategoryWord = { word: string; category: string };
+
 export type Dictionary = {
   intents: Record<Intent, string[]>;
   categoryWords: CategoryWord[];
+  docCategoryWords: DocCategoryWord[];
 };

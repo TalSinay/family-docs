@@ -7,7 +7,8 @@ export interface IQuickAddWord {
   _id: mongoose.Types.ObjectId;
   workspaceId: mongoose.Types.ObjectId;
   word: string; // מנורמל: בלי ניקוד/גרשיים
-  intent: "expense" | "income" | "task" | "reminder" | "shopping" | "question" | "document";
+  intent?: "expense" | "income" | "task" | "reminder" | "shopping" | "question" | "document";
+  category?: string; // קטגוריית מסמך ראשית (מילה ← קטגוריה), למשל "פוליסה" ← ביטוחים
   createdBy: mongoose.Types.ObjectId;
   createdAt: Date;
 }
@@ -18,8 +19,8 @@ const QuickAddWordSchema = new Schema<IQuickAddWord>({
   intent: {
     type: String,
     enum: ["expense", "income", "task", "reminder", "shopping", "question", "document"],
-    required: true,
   },
+  category: { type: String },
   createdBy: { type: Schema.Types.ObjectId, ref: "User", required: true },
   createdAt: { type: Date, default: Date.now },
 });
