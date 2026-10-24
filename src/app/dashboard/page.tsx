@@ -3,9 +3,39 @@
 import { useCallback, useEffect, useState } from "react";
 import { useSession } from "next-auth/react";
 import Link from "next/link";
-import { ChevronRight, ChevronLeft, TrendingDown, TrendingUp, Scale, BarChart3, Upload } from "lucide-react";
+import { ChevronRight, ChevronLeft, TrendingDown, TrendingUp, Scale, BarChart3, Upload, AlertCircle, ListChecks, Bell, ShoppingCart } from "lucide-react";
 import { DocumentCard } from "@/components/DocumentCard";
 import { formatCurrency, HEBREW_MONTHS } from "@/lib/format";
+
+type AttentionItem = {
+  kind: "monthly" | "task" | "document";
+  id: string;
+  name: string;
+  label: string;
+  nextDate: string;
+  time: string;
+};
+
+const ATTENTION_DAYS = 3;
+
+function dayDiff(from: string, to: string): number {
+  const [fy, fm, fd] = from.split("-").map(Number);
+  const [ty, tm, td] = to.split("-").map(Number);
+  return Math.round((Date.UTC(ty, tm - 1, td) - Date.UTC(fy, fm - 1, fd)) / 86400000);
+}
+
+function attentionWhen(diff: number, time: string): string {
+  if (diff < 0) return `באיחור ${-diff} ימים`;
+  if (diff === 0) return `היום · ${time}`;
+  if (diff === 1) return `מחר · ${time}`;
+  return `בעוד ${diff} ימים`;
+}
+
+function attentionHref(item: AttentionItem): string {
+  if (item.kind === "task") return "/tasks";
+  if (item.kind === "document") return `/documents/${item.id}`;
+  return "/notifications";
+}
 
 type DashboardData = {
   month: string; // "YYYY-MM"
@@ -36,6 +66,7 @@ export default function DashboardPage() {
   const [cursor, setCursor] = useState(() => new Date());
   const [data, setData] = useState<DashboardData | null>(null);
   const [loading, setLoading] = useState(true);
+  const [attention, setAttention] = useState<{ item: AttentionItem; diff: number }[]>([]);
 
   useEffect(() => {
     // eslint-disable-next-line react-hooks/set-state-in-effect -- רק קובע "עכשיו" אחרי עליית הרכיב בדפדפן
@@ -63,6 +94,29 @@ export default function DashboardPage() {
     // activeWorkspaceId בתלויות בכוונה: מעבר workspace מרענן מיד, בלי ניווט מלא.
   }, [mounted, monthKey, fetchDashboard, activeWorkspaceId]);
 
+  // "דורש טיפול": התראות שמתוזמנות להיום או בימים הקרובים (אותם כללים כמו עמוד ההתראות)
+  useEffect(() => {
+    if (!mounted) return;
+    let cancelled = false;
+    (async () => {
+      try {
+        const res = await fetch("/api/notifications");
+        if (!res.ok) return;
+        const json: { now: { date: string }; scheduled: AttentionItem[] } = await res.json();
+        const list = json.scheduled
+          .map((item) => ({ item, diff: dayDiff(json.now.date, item.nextDate) }))
+          .filter((x) => x.diff <= ATTENTION_DAYS)
+          .slice(0, 5);
+        if (!cancelled) setAttention(list);
+      } catch {
+        /* לא קריטי - הסעיף פשוט לא מוצג */
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [mounted, activeWorkspaceId]);
+
   const isCurrentMonth = mounted && monthKey === `${new Date().getFullYear()}-${String(new Date().getMonth() + 1).padStart(2, "0")}`;
 
   if (!mounted) {
@@ -71,9 +125,62 @@ export default function DashboardPage() {
 
   return (
     <div className="space-y-6">
+      <section className="space-y-3">
+        <div>
+          <p className="text-sm text-slate-500">
+            שלום {session?.user?.displayName || session?.user?.name || ""}
+          </p>
+          <h1 className="text-2xl font-bold leading-tight">מה תרצה לעשות היום?</h1>
+        </div>
+        <div className="flex flex-wrap gap-2">
+          {[
+            { href: "/tasks", label: "משימה חדשה", icon: ListChecks },
+            { href: "/notifications", label: "תזכורת חדשה", icon: Bell },
+            { href: "/shopping", label: "הוסף לקניות", icon: ShoppingCart },
+          ].map(({ href, label, icon: Icon }) => (
+            <Link
+              key={href}
+              href={href}
+              className="inline-flex items-center gap-1.5 rounded-full border border-slate-300 bg-white px-3.5 py-1.5 text-sm hover:border-teal-400"
+            >
+              <Icon size={14} className="text-teal-700" /> {label}
+            </Link>
+          ))}
+        </div>
+        {attention.length > 0 && (
+          <div>
+            <h2 className="text-xs font-bold text-slate-500 mb-2">דורש טיפול</h2>
+            <div className="space-y-2">
+              {attention.map(({ item, diff }) => (
+                <Link
+                  key={`${item.kind}-${item.id}`}
+                  href={attentionHref(item)}
+                  className="card p-3 flex items-center gap-3 hover:border-teal-300 transition-colors"
+                >
+                  <div
+                    className={`w-9 h-9 rounded-xl flex items-center justify-center shrink-0 ${
+                      diff < 0 ? "bg-red-50 text-red-600" : "bg-teal-50 text-teal-700"
+                    }`}
+                  >
+                    <AlertCircle size={17} />
+                  </div>
+                  <div className="min-w-0 flex-1">
+                    <p className="font-medium text-sm truncate">{item.name}</p>
+                    <p className="text-xs text-slate-500 truncate">{item.label}</p>
+                  </div>
+                  <span className={`text-xs font-medium shrink-0 ${diff < 0 ? "text-red-600" : "text-slate-500"}`}>
+                    {attentionWhen(diff, item.time)}
+                  </span>
+                </Link>
+              ))}
+            </div>
+          </div>
+        )}
+      </section>
+
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-xl font-bold">דשבורד</h1>
+          <h2 className="text-lg font-bold">סיכום חודשי</h2>
           <p className="text-sm text-slate-500">
             {isCurrentMonth ? "סיכום החודש הנוכחי" : "סיכום החודש הנבחר"}
           </p>

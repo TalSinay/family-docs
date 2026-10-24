@@ -5,8 +5,7 @@ import { useSession, signOut } from "next-auth/react";
 import { ReactNode, useEffect, useRef } from "react";
 import Link from "next/link";
 import { LogOut, RefreshCw, Search, ShieldCheck, UserCircle } from "lucide-react";
-import { BottomNav } from "./BottomNav";
-import { UploadButton } from "./UploadButton";
+import { BottomBar } from "./BottomBar";
 import { WorkspaceSwitcher } from "./WorkspaceSwitcher";
 
 const AUTH_PAGES = ["/login", "/admin/login"];
@@ -101,10 +100,9 @@ export function AppShell({ children }: { children: ReactNode }) {
         </div>
       </header>
 
-      <main className="flex-1 max-w-3xl w-full mx-auto px-4 py-6 pb-28">{children}</main>
+      <main className="flex-1 max-w-3xl w-full mx-auto px-4 py-6 pb-32">{children}</main>
 
-      {session?.user && <UploadButton />}
-      {session?.user && <BottomNav />}
+      {session?.user && <BottomBar />}
     </>
   );
 }

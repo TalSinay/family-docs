@@ -34,6 +34,13 @@ export default function SearchPage() {
   const [loading, setLoading] = useState(false);
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
+  // מגיע משורת הכתיבה בבר התחתון: /search?q=...
+  useEffect(() => {
+    const initial = new URLSearchParams(window.location.search).get("q");
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- קריאה חד-פעמית של הפרמטר אחרי עליית הרכיב
+    if (initial) setQuery(initial);
+  }, []);
+
   useEffect(() => {
     if (debounceRef.current) clearTimeout(debounceRef.current);
 
