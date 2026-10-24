@@ -12,6 +12,7 @@ import Task from "@/lib/models/Task";
 import SubCategory from "@/lib/models/SubCategory";
 import ShoppingList from "@/lib/models/ShoppingList";
 import MonthlyReminder from "@/lib/models/MonthlyReminder";
+import QuickAddWord from "@/lib/models/QuickAddWord";
 
 // גיבוי מלא של כל הנתונים (כל ה-workspace-ים, לא רק הפעיל) כקובץ ZIP אחד -
 // זמין רק ל-admin מאומת (ראו requireAdmin, שכולל את חלון 48 השעות מאז OTP).
@@ -38,6 +39,7 @@ export async function GET() {
     subcategories,
     shoppingLists,
     monthlyReminders,
+    quickAddWords,
   ] = await Promise.all([
     Workspace.find({}).lean(),
     WorkspaceMembership.find({}).lean(),
@@ -50,6 +52,7 @@ export async function GET() {
     SubCategory.find({}).lean(),
     ShoppingList.find({}).lean(),
     MonthlyReminder.find({}).lean(),
+    QuickAddWord.find({}).lean(),
   ]);
 
   const zip = new JSZip();
@@ -66,6 +69,7 @@ export async function GET() {
   zip.file("subcategories.json", JSON.stringify(subcategories, null, 2));
   zip.file("shopping-lists.json", JSON.stringify(shoppingLists, null, 2));
   zip.file("monthly-reminders.json", JSON.stringify(monthlyReminders, null, 2));
+  zip.file("quick-add-words.json", JSON.stringify(quickAddWords, null, 2));
 
   // קבצים בינאריים - נשמרים בנפרד מה-JSON (files.json רק המטא-דאטה, בלי
   // ה-data עצמו), כדי שאפשר יהיה לפתוח כל קובץ ישירות מהתיקייה בלי לפענח base64.

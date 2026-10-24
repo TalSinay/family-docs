@@ -17,6 +17,7 @@ const TEMPLATES: Template[] = [
   { id: "income", intent: "income", text: "קיבלתי ___ מ___", hint: "הכנסה" },
   { id: "monthly", intent: "reminder", text: "תזכיר לי כל 1 לחודש ___", hint: "תזכורת חודשית" },
   { id: "remind-date", intent: "reminder", text: "תזכיר לי מחר ___", hint: "תזכורת" },
+  { id: "document", intent: "document", text: "מסמך חדש ___", hint: "מסמך חדש" },
   { id: "task", intent: "task", text: "צריך ___", hint: "משימה" },
   { id: "shopping", intent: "shopping", text: "תוסיף לקניות ___", hint: "קניות" },
   { id: "q-when", intent: "question", text: "מתי מתחדש ___", hint: "שאלה" },

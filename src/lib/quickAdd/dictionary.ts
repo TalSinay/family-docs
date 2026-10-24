@@ -9,6 +9,7 @@ export const DEFAULT_DICTIONARY: Dictionary = {
     reminder: ["תזכיר", "תזכירי", "הזכר", "הזכירי", "תזכורת", "תתריע", "להזכיר"],
     task: ["משימה", "צריך", "צריכה", "חייב", "חייבת", "חייבים", "לא לשכוח", "לזכור", "צריכים"],
     shopping: ["לקניות", "קניות", "לרשימה", "לקנות", "לסופר"],
+    document: ["מסמך", "קובץ", "מסמך חדש", "קובץ חדש"],
     question: ["מתי", "כמה", "איפה", "האם", "איזה", "איזו", "מה"],
   },
   categoryWords: [
@@ -23,6 +24,21 @@ export const DEFAULT_DICTIONARY: Dictionary = {
     ...words("שכר", ["משכורת", "שכר", "בונוס", "קצבה", "החזר מס", "החזר"]),
   ],
 };
+
+// מילה ← קטגוריית מסמך (בכוונת "מסמך חדש")
+export const DOC_CATEGORY_WORDS: { word: string; category: string }[] = [
+  { word: "זיכוי", category: "זיכויים" },
+  { word: "זיכויים", category: "זיכויים" },
+  { word: "קבלה", category: "קבלות" },
+  { word: "קבלות", category: "קבלות" },
+  { word: "ביטוח", category: "ביטוחים" },
+  { word: "פוליסה", category: "ביטוחים" },
+  { word: "פוליסת", category: "ביטוחים" },
+  { word: "קרן השתלמות", category: "פיננסים" },
+  { word: "פנסיה", category: "פיננסים" },
+  { word: "חוזה", category: "כללי" },
+  { word: "הסכם", category: "כללי" },
+];
 
 function words(subcategory: string, list: string[]): CategoryWord[] {
   return list.map((word) => ({ word, subcategory }));

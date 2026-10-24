@@ -1,4 +1,4 @@
-import { DEFAULT_DICTIONARY } from "./dictionary";
+import { DEFAULT_DICTIONARY, DOC_CATEGORY_WORDS } from "./dictionary";
 import { Dictionary, Highlight, HighlightKind, Intent, ParseResult } from "./types";
 
 // ---------- עזרי טקסט ----------
@@ -118,7 +118,7 @@ const STOPWORDS = new Set(["על", "את", "של", "לי", "אני", "גם", "ע
 
 const NOUN_TRIGGERS = new Set(["משכורת"]);
 
-const PRIORITY: Intent[] = ["shopping", "reminder", "expense", "income", "task", "question"];
+const PRIORITY: Intent[] = ["shopping", "reminder", "expense", "income", "document", "task", "question"];
 
 export function parse(
   text: string,
@@ -162,7 +162,7 @@ export function parse(
   (Object.keys(dict.intents) as Intent[]).forEach((intent) => {
     for (const phrase of dict.intents[intent]) {
       const ws = normalizeWord(phrase).split(/\s+/).filter(Boolean);
-      const weight = intent === "question" ? (ws[0] === "מה" ? 1 : 2) : ["shopping", "reminder", "expense", "income"].includes(intent) ? 3 : 2;
+      const weight = intent === "question" ? (ws[0] === "מה" ? 1 : 2) : ["shopping", "reminder", "expense", "income", "document"].includes(intent) ? 3 : 2;
       phrases.push({ intent, words: ws, weight });
     }
   });
@@ -327,7 +327,7 @@ export function parse(
     }
     if (val === null) continue;
     // מספר שמופיע אחרי "ל"/"ב" ללא סימון כסף, בהקשר לא כספי, לא נחשב סכום
-    if (!isMoney && intent !== null && intent !== "question" && !tokensHaveCurrency(tokens, i, span)) continue;
+    if ((intent === "task" || intent === "reminder" || intent === "shopping") && !tokensHaveCurrency(tokens, i, span)) continue;
     amount = val;
     for (let k = 0; k < span; k++) claim(i + k, "amt");
     const after = tokens[i + span];
@@ -358,6 +358,25 @@ export function parse(
     }
   }
 
+  // קטגוריית מסמך ("זיכוי" ← זיכויים) בכוונת "מסמך חדש"
+  let docCategory: string | undefined;
+  if (intent === "document") {
+    const docPhrases = DOC_CATEGORY_WORDS.map((c) => ({ ws: normalizeWord(c.word).split(/\s+/), cat: c.category })).sort(
+      (a, b) => b.ws.length - a.ws.length
+    );
+    outerDoc: for (let i = 0; i < tokens.length; i++) {
+      if (!free(i)) continue;
+      for (const c of docPhrases) {
+        if (i + c.ws.length > tokens.length) continue;
+        if (c.ws.every((w, k) => free(i + k) && variants(tokens[i + k].norm).includes(w))) {
+          docCategory = c.cat;
+          for (let k = 0; k < c.ws.length; k++) claim(i + k, "cat");
+          break outerDoc;
+        }
+      }
+    }
+  }
+
   // אין מילת כוונה מוכרת: מנחשים לפי מה שזוהה, ומסמנים כניחוש כדי שהמשתמש יוכל ללמד את המילון
   let guessed = false;
   if (intent === null && amount !== undefined) {
@@ -380,7 +399,15 @@ export function parse(
       const c = claims.get(i);
       return c === undefined || c === "cat";
     });
-  const base = { highlights, notes, date, time, guessed, unknownWords: unknownWordsOf(tokens, contentIdx, claims) };
+  const base = {
+    highlights,
+    notes,
+    date,
+    time,
+    guessed,
+    unknownWords: unknownWordsOf(tokens, contentIdx, claims),
+    leadPhrase: leadPhraseOf(tokens, claims),
+  };
 
   if (intent === "question") {
     const q = tokens
@@ -399,12 +426,25 @@ export function parse(
 
   const titleWords = contentIdx.map((i) => tokens[i]).filter((t) => !(isMoney && isStop(t.norm)));
   const trimLead = (arr: Token[]) => {
-    // בכותרת של משימה/תזכורת מורידים מילות קישור בתחילתה ("ש", "את")
+    // בכותרת מורידים מילות קישור בקצוות ("את" בהתחלה, "של"/"על" בסוף)
     const a = [...arr];
     while (a.length && ["את", "ש", "ל", "ו"].includes(a[0].norm)) a.shift();
+    while (a.length && ["של", "על", "את", "ל", "ב", "עם"].includes(a[a.length - 1].norm)) a.pop();
     return a;
   };
   const title = (isMoney ? titleWords : trimLead(titleWords)).map((t) => t.raw).join(" ").trim();
+
+  if (intent === "document") {
+    const docTitle = trimLead(titleWords).map((t) => t.raw).join(" ").trim();
+    return {
+      ...base,
+      kind: "document",
+      confidence: !docTitle ? "low" : guessed ? "medium" : "high",
+      title: docTitle,
+      amount,
+      docCategory: docCategory ?? "כללי",
+    };
+  }
 
   if (intent === "expense" || intent === "income") {
     const conf = amount !== undefined ? (guessed ? "medium" : title || subcategory ? "high" : "medium") : "low";
@@ -448,6 +488,16 @@ function unknownWordsOf(tokens: Token[], contentIdx: number[], claims: Map<numbe
   return contentIdx
     .filter((i) => claims.get(i) === undefined && !STOPWORDS.has(tokens[i].norm))
     .map((i) => tokens[i].raw);
+}
+
+// תחילת המשפט שלא זוהתה (עד שתי מילים) - מה שכדאי ללמד את המילון, למשל "יש לי"
+function leadPhraseOf(tokens: Token[], claims: Map<number, HighlightKind>): string | undefined {
+  const out: string[] = [];
+  for (let i = 0; i < Math.min(2, tokens.length); i++) {
+    if (claims.get(i) !== undefined) break;
+    out.push(tokens[i].raw);
+  }
+  return out.length ? out.join(" ") : undefined;
 }
 
 function tokensHaveCurrency(tokens: Token[], i: number, span: number): boolean {
