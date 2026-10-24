@@ -55,7 +55,14 @@ export async function POST(req: NextRequest) {
     isMonthlyPayment,
     monthlyAmount,
     attachments,
+    uploadedAt,
   } = body;
+  // תאריך מותאם (למשל "שילמתי אתמול") - רק תאריך תקין שאינו בעתיד הרחוק
+  const customUploadedAt =
+    typeof uploadedAt === "string" && !Number.isNaN(Date.parse(uploadedAt)) &&
+    Date.parse(uploadedAt) < Date.now() + 36 * 3600 * 1000
+      ? new Date(uploadedAt)
+      : undefined;
   const finance = category === "פיננסים" ? sanitizeFinanceFields(body) : {};
 
   if (!title || !category) {
@@ -95,6 +102,7 @@ export async function POST(req: NextRequest) {
     ...(category === "פיננסים" && typeof amount === "number"
       ? { amountHistory: [{ amount, at: new Date() }] }
       : {}),
+    ...(customUploadedAt ? { uploadedAt: customUploadedAt } : {}),
     uploadedBy: session!.user.id,
   });
 

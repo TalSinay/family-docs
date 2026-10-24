@@ -42,7 +42,7 @@ export async function GET(req: NextRequest) {
         { "customFields.value": re },
       ],
     })
-      .select("title category subcategory isImportant amount uploadedAt")
+      .select("title category subcategory isImportant amount uploadedAt dueDate")
       .sort({ uploadedAt: -1 })
       .limit(RESULT_LIMIT)
       .lean(),
