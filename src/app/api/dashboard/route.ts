@@ -1,5 +1,4 @@
 import { NextRequest, NextResponse } from "next/server";
-import mongoose from "mongoose";
 import { requireWorkspace } from "@/lib/requireWorkspace";
 import { connectToDatabase } from "@/lib/mongodb";
 import DocumentModel from "@/lib/models/Document";
@@ -28,32 +27,17 @@ export async function GET(req: NextRequest) {
   const monthStart = new Date(year, month, 1);
   const monthEnd = new Date(year, month + 1, 1);
 
-  // חשוב: אגרגציה (aggregate) לא עוברת דרך ה-casting האוטומטי של mongoose כמו
-  // find(), אז workspaceId (מחרוזת) חייב להיות מומר במפורש ל-ObjectId - אחרת
-  // ה-$match לא תואם שום מסמך, וה"הכנסות"/"הוצאות" מוצגים כ-0 בטעות.
-  const workspaceObjectId = new mongoose.Types.ObjectId(workspaceId);
-
-  const [expensesAgg, incomeAgg, recent, recurringSources] = await Promise.all([
-    DocumentModel.aggregate([
-      {
-        $match: {
-          workspaceId: workspaceObjectId,
-          category: "הוצאות",
-          uploadedAt: { $gte: monthStart, $lt: monthEnd },
-        },
-      },
-      { $group: { _id: null, total: { $sum: "$amount" } } },
-    ]),
-    DocumentModel.aggregate([
-      {
-        $match: {
-          workspaceId: workspaceObjectId,
-          category: "הכנסות",
-          uploadedAt: { $gte: monthStart, $lt: monthEnd },
-        },
-      },
-      { $group: { _id: null, total: { $sum: "$amount" } } },
-    ]),
+  // רשומות הוצאה/הכנסה של החודש (לפירוט בלחיצה על הכרטיס, והסכומים נגזרים מהן)
+  const [flowDocs, recent, recurringSources] = await Promise.all([
+    DocumentModel.find({
+      workspaceId,
+      category: { $in: ["הוצאות", "הכנסות"] },
+      uploadedAt: { $gte: monthStart, $lt: monthEnd },
+    })
+      .select("title category subcategory amount uploadedAt")
+      .sort({ uploadedAt: 1 })
+      .limit(500)
+      .lean(),
     // "פעילות אחרונה" מוצגת בהתאם לחודש הנבחר, לא רק לחודש הנוכחי
     DocumentModel.find({ workspaceId, uploadedAt: { $gte: monthStart, $lt: monthEnd } })
       .sort({ uploadedAt: -1 })
@@ -71,20 +55,57 @@ export async function GET(req: NextRequest) {
       uploadedAt: { $lt: monthStart },
       generatedForMonths: { $ne: monthKey },
     })
-      .select("category monthlyAmount")
+      .select("title category subcategory monthlyAmount uploadedAt")
       .lean(),
   ]);
 
-  let totalExpenses = expensesAgg[0]?.total || 0;
-  let totalIncome = incomeAgg[0]?.total || 0;
+  type FlowItem = {
+    id: string;
+    title: string;
+    subcategory?: string;
+    amount: number;
+    date: string; // ISO
+    projected: boolean; // תשלום חודשי קבוע שטרם הופקה עבורו רשומה
+  };
+  const expenseItems: FlowItem[] = [];
+  const incomeItems: FlowItem[] = [];
   let projectedCount = 0;
+
+  for (const d of flowDocs) {
+    if (typeof d.amount !== "number") continue;
+    const item: FlowItem = {
+      id: String(d._id),
+      title: d.title,
+      subcategory: d.subcategory,
+      amount: d.amount,
+      date: new Date(d.uploadedAt).toISOString(),
+      projected: false,
+    };
+    (d.category === "הוצאות" ? expenseItems : incomeItems).push(item);
+  }
 
   for (const source of recurringSources) {
     if (typeof source.monthlyAmount !== "number") continue;
-    if (source.category === "הוצאות") totalExpenses += source.monthlyAmount;
-    else if (source.category === "הכנסות") totalIncome += source.monthlyAmount;
+    // היום בחודש של התשלום הקבוע, מוגבל לאורך החודש הנבחר
+    const day = Math.min(new Date(source.uploadedAt).getDate(), new Date(year, month + 1, 0).getDate());
+    const item: FlowItem = {
+      id: String(source._id),
+      title: source.title,
+      subcategory: source.subcategory,
+      amount: source.monthlyAmount,
+      date: new Date(year, month, day, 12).toISOString(),
+      projected: true,
+    };
+    (source.category === "הוצאות" ? expenseItems : incomeItems).push(item);
     projectedCount++;
   }
+
+  const byDate = (a: FlowItem, b: FlowItem) => a.date.localeCompare(b.date);
+  expenseItems.sort(byDate);
+  incomeItems.sort(byDate);
+  const sum = (items: FlowItem[]) => items.reduce((t, i) => t + i.amount, 0);
+  const totalExpenses = sum(expenseItems);
+  const totalIncome = sum(incomeItems);
 
   return NextResponse.json({
     month: monthKey,
@@ -93,5 +114,7 @@ export async function GET(req: NextRequest) {
     balance: totalIncome - totalExpenses,
     recentActivity: await overlayUploaderDisplayNames(workspaceId, recent),
     projectedCount,
+    expenseItems,
+    incomeItems,
   });
 }

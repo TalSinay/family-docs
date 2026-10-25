@@ -7,7 +7,8 @@ import { ChevronRight, ChevronLeft, TrendingDown, TrendingUp, Scale, BarChart3, 
 import { DocumentCard } from "@/components/DocumentCard";
 import { EmptyState } from "@/components/EmptyState";
 import { ListSkeleton } from "@/components/Skeleton";
-import { formatCurrency, HEBREW_MONTHS } from "@/lib/format";
+import { Modal } from "@/components/Modal";
+import { formatCurrency, formatDate, HEBREW_MONTHS } from "@/lib/format";
 
 type AttentionItem = {
   kind: "monthly" | "task" | "document";
@@ -39,7 +40,18 @@ function attentionHref(item: AttentionItem): string {
   return "/notifications";
 }
 
+type FlowItem = {
+  id: string;
+  title: string;
+  subcategory?: string;
+  amount: number;
+  date: string;
+  projected: boolean;
+};
+
 type DashboardData = {
+  expenseItems: FlowItem[];
+  incomeItems: FlowItem[];
   month: string; // "YYYY-MM"
   totalExpenses: number;
   totalIncome: number;
@@ -68,6 +80,7 @@ export default function DashboardPage() {
   const [cursor, setCursor] = useState(() => new Date());
   const [data, setData] = useState<DashboardData | null>(null);
   const [loading, setLoading] = useState(true);
+  const [flowOpen, setFlowOpen] = useState<"income" | "expense" | null>(null);
   const [attention, setAttention] = useState<{ item: AttentionItem; diff: number }[]>([]);
 
   useEffect(() => {
@@ -242,13 +255,21 @@ export default function DashboardPage() {
           <Scale size={14} /> מאזן החודש
         </div>
         <p className="text-4xl font-bold mt-1 tracking-tight">{formatCurrency(data?.balance ?? 0)}</p>
-        <div className="flex gap-6 mt-4 text-sm text-white/90">
-          <span className="flex items-center gap-1.5">
+        <div className="flex gap-3 mt-4 text-sm">
+          <button
+            onClick={() => setFlowOpen("income")}
+            className="flex-1 flex items-center gap-1.5 rounded-2xl bg-white/15 hover:bg-white/25 active:scale-[0.98] transition px-3 py-2.5 text-white"
+          >
             <TrendingUp size={15} /> הכנסות {formatCurrency(data?.totalIncome ?? 0)}
-          </span>
-          <span className="flex items-center gap-1.5">
+            <ChevronLeft size={14} className="mr-auto opacity-70" />
+          </button>
+          <button
+            onClick={() => setFlowOpen("expense")}
+            className="flex-1 flex items-center gap-1.5 rounded-2xl bg-white/15 hover:bg-white/25 active:scale-[0.98] transition px-3 py-2.5 text-white"
+          >
             <TrendingDown size={15} /> הוצאות {formatCurrency(data?.totalExpenses ?? 0)}
-          </span>
+            <ChevronLeft size={14} className="mr-auto opacity-70" />
+          </button>
         </div>
       </div>
 
@@ -274,6 +295,51 @@ export default function DashboardPage() {
             data?.recentActivity.map((doc) => <DocumentCard key={doc._id} doc={doc} />)}
         </div>
       </div>
+
+      <Modal
+        open={flowOpen !== null}
+        onClose={() => setFlowOpen(null)}
+        title={`${flowOpen === "income" ? "הכנסות" : "הוצאות"} · ${HEBREW_MONTHS[month]} ${year}`}
+      >
+        <FlowList
+          items={(flowOpen === "income" ? data?.incomeItems : data?.expenseItems) ?? []}
+          onNavigate={() => setFlowOpen(null)}
+        />
+      </Modal>
+    </div>
+  );
+}
+
+function FlowList({ items, onNavigate }: { items: FlowItem[]; onNavigate: () => void }) {
+  if (items.length === 0) {
+    return <p className="text-sm text-slate-500 text-center py-6">אין רשומות בחודש הזה.</p>;
+  }
+  const total = items.reduce((t, i) => t + i.amount, 0);
+  return (
+    <div className="space-y-2">
+      <p className="text-sm text-slate-500">
+        {items.length} רשומות · סה״כ <span className="font-bold text-slate-900">{formatCurrency(total)}</span>
+      </p>
+      {items.map((item) => (
+        <Link
+          key={`${item.id}-${item.projected ? "p" : "a"}`}
+          href={`/documents/${item.id}`}
+          onClick={onNavigate}
+          className="card flex items-center gap-3 p-3 hover:border-teal-300 transition-colors"
+        >
+          <div className="flex-1 min-w-0">
+            <p className="font-medium truncate">{item.title}</p>
+            <p className="text-xs text-slate-500 mt-0.5 flex items-center gap-1.5 flex-wrap">
+              <span>{formatDate(item.date)}</span>
+              {item.subcategory && <span>· {item.subcategory}</span>}
+              {item.projected && (
+                <span className="rounded-full bg-amber-100 text-amber-800 px-2 py-0.5 font-medium">צפוי · קבוע חודשי</span>
+              )}
+            </p>
+          </div>
+          <span className="font-semibold shrink-0">{formatCurrency(item.amount)}</span>
+        </Link>
+      ))}
     </div>
   );
 }
