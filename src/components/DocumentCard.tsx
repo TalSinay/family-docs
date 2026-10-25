@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { Star } from "lucide-react";
 import { categoryUi } from "@/lib/categoryTheme";
+import { DueRing } from "./DueRing";
 import { formatDate } from "@/lib/format";
 
 type DocCardData = {
@@ -10,6 +11,7 @@ type DocCardData = {
   subcategory?: string;
   isImportant?: boolean;
   amount?: number;
+  dueDate?: string;
   uploadedAt: string | Date;
   uploadedBy?: { name?: string } | null;
 };
@@ -42,6 +44,7 @@ export function DocumentCard({ doc }: { doc: DocCardData }) {
           {new Intl.NumberFormat("he-IL", { style: "currency", currency: "ILS", maximumFractionDigits: 0 }).format(doc.amount)}
         </span>
       )}
+      <DueRing dueDate={doc.dueDate} />
     </Link>
   );
 }

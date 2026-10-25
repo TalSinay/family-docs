@@ -3,8 +3,9 @@
 import { FormEvent, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { Check, Search, Send, Sparkles } from "lucide-react";
+import { Search, Send, Sparkles } from "lucide-react";
 import { Modal } from "./Modal";
+import { useToast, ToastInput } from "./ToastProvider";
 import { parse } from "@/lib/quickAdd/parse";
 import { DEFAULT_DICTIONARY, mergeDictionary, CustomDictionaryEntry } from "@/lib/quickAdd/dictionary";
 import { MAIN_CATEGORIES } from "@/lib/categories";
@@ -232,6 +233,7 @@ function QuickAddResult({
   onClose: (clearInput: boolean) => void;
 }) {
   const router = useRouter();
+  const toast = useToast();
   const [result, setResult] = useState<ParseResult>(initial);
   const [title, setTitle] = useState(initial.title);
   const [amount, setAmount] = useState(initial.amount !== undefined ? String(initial.amount) : "");
@@ -247,7 +249,6 @@ function QuickAddResult({
   const [itemsText, setItemsText] = useState((initial.items ?? []).join(", "));
   const [phase, setPhase] = useState<Phase>("edit");
   const [message, setMessage] = useState("");
-  const [link, setLink] = useState<{ href: string; label: string } | null>(null);
 
   function applyResult(r: ParseResult) {
     setResult(r);
@@ -338,6 +339,11 @@ function QuickAddResult({
   async function save() {
     setPhase("saving");
     try {
+      let info: ToastInput = { title: "נשמר" };
+      const del = (url: string) => async () => {
+        await fetch(url, { method: "DELETE" });
+        router.refresh();
+      };
       if (result.kind === "expense" || result.kind === "income") {
         const created = await call("/api/documents", "POST", {
           title: title.trim(),
@@ -347,13 +353,17 @@ function QuickAddResult({
           // שעה 12:00 כדי שהתאריך לא יזוז בין אזורי זמן
           uploadedAt: new Date(`${date}T12:00:00`).toISOString(),
         });
-        setMessage(`${result.kind === "expense" ? "ההוצאה" : "ההכנסה"} נשמרה`);
-        setLink({ href: `/documents/${created._id}`, label: "פתח לעריכה" });
+        info = {
+          title: result.kind === "expense" ? "הוצאה נשמרה" : "הכנסה נשמרה",
+          detail: `${title.trim()} · ₪${amountNum.toLocaleString("he-IL")}`,
+          href: `/documents/${created._id}`,
+          hrefLabel: "ערוך",
+          undo: del(`/api/documents/${created._id}`),
+        };
       } else if (result.kind === "task") {
         const task = await call("/api/tasks", "POST", { title: title.trim(), dueDate: date });
         if (time) await call(`/api/tasks/${task._id}`, "PATCH", { notifyTime: time });
-        setMessage("המשימה נוצרה");
-        setLink({ href: "/tasks", label: "פתח משימות" });
+        info = { title: "משימה נוצרה", detail: title.trim(), href: "/tasks", hrefLabel: "פתח", undo: del(`/api/tasks/${task._id}`) };
       } else if (result.kind === "document") {
         const created = await call("/api/documents", "POST", {
           title: title.trim(),
@@ -361,12 +371,22 @@ function QuickAddResult({
           amount: amount !== "" ? amountNum : undefined,
           dueDate: dueDocDate || undefined,
         });
-        setMessage("המסמך נוסף");
-        setLink({ href: `/documents/${created._id}`, label: "פתח לעריכה" });
+        info = {
+          title: "מסמך נוסף",
+          detail: `${title.trim()} · ${category}`,
+          href: `/documents/${created._id}`,
+          hrefLabel: "ערוך",
+          undo: del(`/api/documents/${created._id}`),
+        };
       } else if (result.kind === "monthly") {
-        await call("/api/monthly-reminders", "POST", { title: title.trim(), dayOfMonth: dayNum, time: time || undefined });
-        setMessage("התזכורת החודשית נוצרה");
-        setLink({ href: "/notifications", label: "פתח התראות" });
+        const created = await call("/api/monthly-reminders", "POST", { title: title.trim(), dayOfMonth: dayNum, time: time || undefined });
+        info = {
+          title: "תזכורת חודשית נוצרה",
+          detail: `${title.trim()} · ב-${dayNum} לחודש`,
+          href: "/notifications",
+          hrefLabel: "פתח",
+          undo: del(`/api/monthly-reminders/${created._id}`),
+        };
       } else if (result.kind === "shopping") {
         const lists = await fetch("/api/shopping-lists").then((r) => r.json());
         const open = Array.isArray(lists) ? lists.find((l: { isCompleted: boolean }) => !l.isCompleted) : null;
@@ -375,12 +395,12 @@ function QuickAddResult({
         await call(`/api/shopping-lists/${list._id}`, "PATCH", {
           items: [...existing, ...items.map((name) => ({ name, quantity: 1, inCart: false }))],
         });
-        setMessage(`נוספו ${items.length} פריטים לקניות`);
-        setLink({ href: `/shopping/${list._id}`, label: "פתח רשימת קניות" });
+        info = { title: `נוספו ${items.length} פריטים לקניות`, detail: items.join(", "), href: `/shopping/${list._id}`, hrefLabel: "פתח" };
       }
       rememberInput(text);
-      setPhase("done");
       router.refresh();
+      toast.show(info);
+      onClose(true);
     } catch (e) {
       setMessage(e instanceof Error ? e.message : "השמירה נכשלה");
       setPhase("error");
@@ -416,7 +436,7 @@ function QuickAddResult({
   const title0 = result.kind === "unknown" ? "לא בטוח מה התכוונת" : KIND_LABEL[result.kind];
 
   return (
-    <Modal open onClose={() => onClose(phase === "done")} title={title0}>
+    <Modal open onClose={() => onClose(false)} title={title0}>
       <div className="space-y-4 min-w-0">
         <Highlighted text={text} highlights={result.highlights} />
 
@@ -623,24 +643,6 @@ function QuickAddResult({
         )}
 
         {(phase === "error" || (phase === "edit" && message)) && <p className="text-sm text-red-600">{message}</p>}
-
-        {phase === "done" && (
-          <div className="space-y-3">
-            <div className="card p-3.5 flex items-center gap-2.5 bg-emerald-50 border-emerald-200 text-emerald-800">
-              <Check size={18} /> <span className="font-medium text-sm">{message}</span>
-            </div>
-            <div className="flex gap-2">
-              {link && (
-                <Link href={link.href} onClick={() => onClose(true)} className="btn-primary flex-1 text-center">
-                  {link.label}
-                </Link>
-              )}
-              <button onClick={() => onClose(true)} className="btn-secondary flex-1">
-                סגור
-              </button>
-            </div>
-          </div>
-        )}
 
         {(phase === "edit" || phase === "saving" || phase === "error") &&
           result.kind !== "unknown" &&

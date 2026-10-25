@@ -7,6 +7,7 @@ import DocumentModel from "@/lib/models/Document";
 import SubCategoryModel from "@/lib/models/SubCategory";
 import Workspace from "@/lib/models/Workspace";
 import { DocumentCard } from "@/components/DocumentCard";
+import { EmptyState } from "@/components/EmptyState";
 import { computeBankEffective } from "@/lib/bank";
 import { FinanceOverview, FinanceDoc } from "@/components/FinanceOverview";
 import { DEFAULT_SUBCATEGORIES, MAIN_CATEGORIES, MainCategory } from "@/lib/categories";
@@ -121,7 +122,7 @@ export default async function CategoryPage({
       ) : (
       <div className="space-y-2">
         {docs.length === 0 && (
-          <p className="text-sm text-slate-400 text-center py-8">אין עדיין מסמכים בקטגוריה הזו.</p>
+          <EmptyState title={`עוד אין ${category} כאן`} text="הוסיפו מסמך ונזכיר לכם לפני שתאריך היעד מגיע" actionLabel="הוסף מסמך" actionUpload />
         )}
         {JSON.parse(JSON.stringify(docs)).map((doc: { _id: string; [key: string]: unknown }) => (
           <DocumentCard key={doc._id} doc={doc as never} />

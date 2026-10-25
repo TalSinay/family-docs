@@ -1,5 +1,7 @@
 "use client";
 
+import { EmptyState } from "@/components/EmptyState";
+import { ListSkeleton } from "@/components/Skeleton";
 import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
 import { useSession } from "next-auth/react";
@@ -271,7 +273,7 @@ export default function NotificationsPage() {
         </form>
       )}
 
-      {!data && !error && <p className="text-sm text-slate-400 text-center py-8">טוען...</p>}
+      {!data && !error && <ListSkeleton rows={3} />}
 
       {data && (
         <>
@@ -280,7 +282,7 @@ export default function NotificationsPage() {
               <CalendarClock size={16} /> מתוזמנות ({data.scheduled.length})
             </h2>
             {data.scheduled.length === 0 && (
-              <p className="text-sm text-slate-400 text-center py-6">אין התראות מתוזמנות.</p>
+              <EmptyState title="אין התראות מתוזמנות" text="התראות נוצרות מתאריכי יעד של מסמכים, משימות ותזכורות חודשיות" />
             )}
             {data.scheduled.map((item) => {
               const key = `${item.kind}:${item.id}`;

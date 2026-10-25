@@ -1,5 +1,7 @@
 "use client";
 
+import { EmptyState } from "@/components/EmptyState";
+import { ListSkeleton } from "@/components/Skeleton";
 import { useCallback, useEffect, useState } from "react";
 import { useSession } from "next-auth/react";
 import { Plus, Trash2, CalendarDays, Pencil, Check, X } from "lucide-react";
@@ -186,14 +188,12 @@ export default function TasksPage() {
         )}
       </div>
 
-      {loading && <p className="text-sm text-slate-400 text-center py-8">טוען...</p>}
+      {loading && <ListSkeleton rows={4} />}
 
       {!loading && (
         <div className="space-y-2">
           {openTasks.length === 0 && doneTasks.length === 0 && (
-            <p className="text-sm text-slate-400 text-center py-8">
-              אין משימות עדיין. הוסף אחת למעלה.
-            </p>
+            <EmptyState title="אין משימות פתוחות" text="הוסיפו משימה בשדה שלמעלה, או כתבו בשורה התחתונה: צריך ..." />
           )}
 
           {openTasks.map((task) => (

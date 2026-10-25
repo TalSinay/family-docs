@@ -5,6 +5,8 @@ import { useSession } from "next-auth/react";
 import Link from "next/link";
 import { ChevronRight, ChevronLeft, TrendingDown, TrendingUp, Scale, BarChart3, Upload, AlertCircle, ListChecks, Bell, ShoppingCart, Plus } from "lucide-react";
 import { DocumentCard } from "@/components/DocumentCard";
+import { EmptyState } from "@/components/EmptyState";
+import { ListSkeleton } from "@/components/Skeleton";
 import { formatCurrency, HEBREW_MONTHS } from "@/lib/format";
 
 type AttentionItem = {
@@ -259,11 +261,14 @@ export default function DashboardPage() {
       <div>
         <h2 className="font-semibold mb-3">פעילות בחודש זה</h2>
         <div className="space-y-2">
-          {loading && <p className="text-sm text-slate-400 text-center py-8">טוען...</p>}
+          {loading && <ListSkeleton rows={3} />}
           {!loading && data?.recentActivity.length === 0 && (
-            <p className="text-sm text-slate-400 text-center py-8">
-              אין מסמכים בחודש זה.
-            </p>
+            <EmptyState
+              title="עוד אין פעילות בחודש הזה"
+              text="הוסיפו הוצאה, הכנסה או מסמך, ונסכם כאן"
+              actionLabel="הוסף מסמך"
+              actionUpload
+            />
           )}
           {!loading &&
             data?.recentActivity.map((doc) => <DocumentCard key={doc._id} doc={doc} />)}

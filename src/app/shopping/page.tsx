@@ -1,5 +1,7 @@
 "use client";
 
+import { EmptyState } from "@/components/EmptyState";
+import { ListSkeleton } from "@/components/Skeleton";
 import { useCallback, useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { useSession } from "next-auth/react";
@@ -98,14 +100,12 @@ export default function ShoppingListsPage() {
         </button>
       </div>
 
-      {loading && <p className="text-sm text-slate-400 text-center py-8">טוען...</p>}
+      {loading && <ListSkeleton rows={3} />}
 
       {!loading && (
         <div className="space-y-4">
           {active.length === 0 && completed.length === 0 && (
-            <p className="text-sm text-slate-400 text-center py-8">
-              אין רשימות קניות עדיין. צור אחת למעלה.
-            </p>
+            <EmptyState title="אין רשימות קניות" text="צרו רשימה למעלה, או כתבו בשורה התחתונה: תוסיף לקניות חלב" />
           )}
 
           {active.length > 0 && (
