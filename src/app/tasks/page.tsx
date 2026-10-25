@@ -1,5 +1,7 @@
 "use client";
 
+import { SwipeRow } from "@/components/SwipeRow";
+import { useToast } from "@/components/ToastProvider";
 import { EmptyState } from "@/components/EmptyState";
 import { ListSkeleton } from "@/components/Skeleton";
 import { useCallback, useEffect, useState } from "react";
@@ -36,6 +38,7 @@ export default function TasksPage() {
   const { data: session } = useSession();
   const activeWorkspaceId = session?.user?.activeWorkspaceId;
 
+  const toast = useToast();
   const [mounted, setMounted] = useState(false);
   const [todayStr, setTodayStr] = useState("");
   const [tasks, setTasks] = useState<TaskItem[]>([]);
@@ -139,8 +142,23 @@ export default function TasksPage() {
   }
 
   async function deleteTask(id: string) {
+    const task = tasks.find((t) => t._id === id);
     setTasks((prev) => prev.filter((t) => t._id !== id));
     await fetch(`/api/tasks/${id}`, { method: "DELETE" });
+    if (task) {
+      toast.show({
+        title: "המשימה נמחקה",
+        detail: task.title,
+        undo: async () => {
+          await fetch("/api/tasks", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ title: task.title, dueDate: task.dueDate, color: task.color }),
+          });
+          fetchTasks();
+        },
+      });
+    }
   }
 
   if (!mounted) {
@@ -313,6 +331,10 @@ function TaskRow({
   }
 
   return (
+    <SwipeRow
+      right={{ label: task.isDone ? "פתח מחדש" : "בוצע", color: "#059669", icon: <Check size={18} />, run: () => onToggle(task) }}
+      left={{ label: "מחיקה", color: "#dc2626", icon: <Trash2 size={18} />, run: () => onDelete(task._id) }}
+    >
     <div className="card flex items-center gap-3 p-3.5" style={{ borderInlineStartWidth: 4, borderInlineStartColor: color }}>
       <button
         onClick={() => onToggle(task)}
@@ -350,5 +372,6 @@ function TaskRow({
         <Trash2 size={16} />
       </button>
     </div>
+    </SwipeRow>
   );
 }
