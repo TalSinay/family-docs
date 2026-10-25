@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { auth } from "@/lib/auth";
 import { MAIN_CATEGORIES } from "@/lib/categories";
+import { categoryUi } from "@/lib/categoryTheme";
 import {
   Shield,
   Landmark,
@@ -36,13 +37,18 @@ export default async function CategoriesPage() {
       <div className="grid grid-cols-2 gap-3">
         {MAIN_CATEGORIES.map((cat) => {
           const Icon = ICONS[cat];
+          const ui = categoryUi(cat);
           return (
             <Link
               key={cat}
               href={`/category/${encodeURIComponent(cat)}`}
               className="card p-5 flex flex-col items-center gap-2 hover:border-teal-300 transition-colors"
+              style={{ borderTop: `4px solid ${ui.color}` }}
             >
-              <div className="w-12 h-12 rounded-2xl bg-teal-50 text-teal-700 flex items-center justify-center">
+              <div
+                className="w-12 h-12 rounded-2xl flex items-center justify-center"
+                style={{ backgroundColor: ui.soft, color: ui.color }}
+              >
                 <Icon size={22} />
               </div>
               <span className="font-medium">{cat}</span>

@@ -22,6 +22,7 @@ import {
 } from "lucide-react";
 import { Modal } from "./Modal";
 import { MAIN_CATEGORIES } from "@/lib/categories";
+import { categoryUi } from "@/lib/categoryTheme";
 
 type IconType = React.ComponentType<{ size?: number; className?: string }>;
 
@@ -35,7 +36,7 @@ const CATEGORY_ICONS: Record<string, IconType> = {
   הכנסות: TrendingUp,
 };
 
-type Tile = { href: string; label: string; icon: IconType };
+type Tile = { href: string; label: string; icon: IconType; color?: string; soft?: string };
 
 // קיצורי הדרך הקבועים - מחליפים את הניווט התחתון הישן (6 פריטים קטנים).
 const SHORTCUTS: Tile[] = [
@@ -56,8 +57,12 @@ function TileLink({ tile, onClose }: { tile: Tile; onClose: () => void }) {
       href={tile.href}
       onClick={onClose}
       className="card p-3 flex flex-col items-center gap-2 hover:border-teal-300 transition-colors text-center"
+      style={tile.color ? { borderTop: `4px solid ${tile.color}` } : undefined}
     >
-      <div className="w-11 h-11 rounded-2xl bg-teal-50 text-teal-700 flex items-center justify-center">
+      <div
+        className="w-11 h-11 rounded-2xl bg-teal-50 text-teal-700 flex items-center justify-center"
+        style={tile.color ? { backgroundColor: tile.soft, color: tile.color } : undefined}
+      >
         <Icon size={21} />
       </div>
       <span className="text-sm font-medium leading-tight">{tile.label}</span>
@@ -70,11 +75,16 @@ export function CategorySheet({ open, onClose }: { open: boolean; onClose: () =>
   const { data: session } = useSession();
   const isOwnerAdmin = session?.user?.role === "admin"; // כמו בעמוד /categories
 
-  const categoryTiles: Tile[] = MAIN_CATEGORIES.map((cat) => ({
-    href: `/category/${encodeURIComponent(cat)}`,
-    label: cat,
-    icon: CATEGORY_ICONS[cat] ?? Folder,
-  }));
+  const categoryTiles: Tile[] = MAIN_CATEGORIES.map((cat) => {
+    const ui = categoryUi(cat);
+    return {
+      href: `/category/${encodeURIComponent(cat)}`,
+      label: cat,
+      icon: CATEGORY_ICONS[cat] ?? Folder,
+      color: ui.color,
+      soft: ui.soft,
+    };
+  });
 
   return (
     <Modal open={open} onClose={onClose} title="כל האפליקציה">

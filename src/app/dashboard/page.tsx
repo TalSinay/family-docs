@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { useSession } from "next-auth/react";
 import Link from "next/link";
-import { ChevronRight, ChevronLeft, TrendingDown, TrendingUp, Scale, BarChart3, Upload, AlertCircle, ListChecks, Bell, ShoppingCart } from "lucide-react";
+import { ChevronRight, ChevronLeft, TrendingDown, TrendingUp, Scale, BarChart3, Upload, AlertCircle, ListChecks, Bell, ShoppingCart, Plus } from "lucide-react";
 import { DocumentCard } from "@/components/DocumentCard";
 import { formatCurrency, HEBREW_MONTHS } from "@/lib/format";
 
@@ -132,20 +132,31 @@ export default function DashboardPage() {
           </p>
           <h1 className="text-2xl font-bold leading-tight">מה תרצה לעשות היום?</h1>
         </div>
-        <div className="flex flex-wrap gap-2">
+        <div className="flex justify-around pt-1">
           {[
-            { href: "/tasks", label: "משימה חדשה", icon: ListChecks },
-            { href: "/notifications", label: "תזכורת חדשה", icon: Bell },
-            { href: "/shopping", label: "הוסף לקניות", icon: ShoppingCart },
-          ].map(({ href, label, icon: Icon }) => (
-            <Link
-              key={href}
-              href={href}
-              className="inline-flex items-center gap-1.5 rounded-full border border-slate-300 bg-white px-3.5 py-1.5 text-sm hover:border-teal-400"
-            >
-              <Icon size={14} className="text-teal-700" /> {label}
-            </Link>
-          ))}
+            { label: "הוסף מסמך", icon: Plus, onClick: () => window.dispatchEvent(new Event("open-upload")) },
+            { label: "משימה", icon: ListChecks, href: "/tasks" },
+            { label: "תזכורת", icon: Bell, href: "/notifications" },
+            { label: "קניות", icon: ShoppingCart, href: "/shopping" },
+          ].map(({ label, icon: Icon, href, onClick }) => {
+            const inner = (
+              <>
+                <span className="w-14 h-14 rounded-full bg-white border border-slate-200 shadow-sm flex items-center justify-center text-teal-700 mx-auto">
+                  <Icon size={22} />
+                </span>
+                <span className="block text-[11px] text-slate-500 mt-1.5 text-center">{label}</span>
+              </>
+            );
+            return href ? (
+              <Link key={label} href={href} className="active:scale-95 transition-transform">
+                {inner}
+              </Link>
+            ) : (
+              <button key={label} onClick={onClick} className="active:scale-95 transition-transform">
+                {inner}
+              </button>
+            );
+          })}
         </div>
         {attention.length > 0 && (
           <div>
@@ -224,30 +235,18 @@ export default function DashboardPage() {
         </div>
       </div>
 
-      <div className="grid grid-cols-3 gap-3">
-        <div className="card p-4">
-          <div className="flex items-center gap-1.5 text-emerald-600 text-xs font-medium mb-1">
-            <TrendingUp size={14} /> הכנסות
-          </div>
-          <p className="text-lg font-bold">{formatCurrency(data?.totalIncome ?? 0)}</p>
+      <div className="rounded-3xl bg-gradient-to-br from-indigo-600 to-sky-500 text-white p-5 shadow-lg shadow-indigo-900/10">
+        <div className="flex items-center gap-1.5 text-xs text-white/80 font-medium">
+          <Scale size={14} /> מאזן החודש
         </div>
-        <div className="card p-4">
-          <div className="flex items-center gap-1.5 text-red-600 text-xs font-medium mb-1">
-            <TrendingDown size={14} /> הוצאות
-          </div>
-          <p className="text-lg font-bold">{formatCurrency(data?.totalExpenses ?? 0)}</p>
-        </div>
-        <div className="card p-4">
-          <div className="flex items-center gap-1.5 text-slate-500 text-xs font-medium mb-1">
-            <Scale size={14} /> מאזן
-          </div>
-          <p
-            className={`text-lg font-bold ${
-              (data?.balance ?? 0) >= 0 ? "text-emerald-700" : "text-red-700"
-            }`}
-          >
-            {formatCurrency(data?.balance ?? 0)}
-          </p>
+        <p className="text-4xl font-bold mt-1 tracking-tight">{formatCurrency(data?.balance ?? 0)}</p>
+        <div className="flex gap-6 mt-4 text-sm text-white/90">
+          <span className="flex items-center gap-1.5">
+            <TrendingUp size={15} /> הכנסות {formatCurrency(data?.totalIncome ?? 0)}
+          </span>
+          <span className="flex items-center gap-1.5">
+            <TrendingDown size={15} /> הוצאות {formatCurrency(data?.totalExpenses ?? 0)}
+          </span>
         </div>
       </div>
 

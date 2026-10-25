@@ -1,5 +1,6 @@
 import Link from "next/link";
-import { Star, FileText } from "lucide-react";
+import { Star } from "lucide-react";
+import { categoryUi } from "@/lib/categoryTheme";
 import { formatDate } from "@/lib/format";
 
 type DocCardData = {
@@ -14,13 +15,17 @@ type DocCardData = {
 };
 
 export function DocumentCard({ doc }: { doc: DocCardData }) {
+  const ui = categoryUi(doc.category);
   return (
     <Link
       href={`/documents/${doc._id}`}
       className="card flex items-center gap-3 p-4 hover:border-teal-300 transition-colors"
     >
-      <div className="w-10 h-10 rounded-xl bg-teal-50 text-teal-700 flex items-center justify-center shrink-0">
-        <FileText size={18} />
+      <div
+        className="w-10 h-10 rounded-xl flex items-center justify-center shrink-0"
+        style={{ backgroundColor: ui.soft, color: ui.color }}
+      >
+        <ui.Icon size={18} />
       </div>
       <div className="flex-1 min-w-0">
         <div className="flex items-center gap-1.5">

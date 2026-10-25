@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { usePathname } from "next/navigation";
 import { Camera, LayoutGrid } from "lucide-react";
 import { QuickAddInput } from "./QuickAdd";
@@ -15,6 +15,13 @@ export function BottomBar() {
   const pathname = usePathname();
   const [sheetOpen, setSheetOpen] = useState(false);
   const [uploadOpen, setUploadOpen] = useState(false);
+
+  // כפתורים אחרים באפליקציה (למשל "הוסף מסמך" במסך הבית) פותחים את חלון ההעלאה דרך אירוע
+  useEffect(() => {
+    const open = () => setUploadOpen(true);
+    window.addEventListener("open-upload", open);
+    return () => window.removeEventListener("open-upload", open);
+  }, []);
 
   // אם נמצאים בתוך עמוד קטגוריה, הקטגוריה בטופס ההעלאה ממולאת מראש.
   let initialCategory: MainCategory | undefined;

@@ -1,3 +1,4 @@
+import { categoryUi } from "@/lib/categoryTheme";
 import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
 import { auth } from "@/lib/auth";
@@ -72,7 +73,18 @@ export default async function CategoryPage({
 
   return (
     <div className="space-y-4">
-      <h1 className="text-xl font-bold">{category}</h1>
+      <div className="flex items-center gap-3">
+        <div
+          className="w-10 h-10 rounded-xl flex items-center justify-center"
+          style={{ backgroundColor: categoryUi(category).soft, color: categoryUi(category).color }}
+        >
+          {(() => {
+            const Icon = categoryUi(category).Icon;
+            return <Icon size={20} />;
+          })()}
+        </div>
+        <h1 className="text-xl font-bold">{category}</h1>
+      </div>
 
       {subcategories.length > 0 && (
         <div className="flex gap-2 overflow-x-auto pb-1 -mx-1 px-1">

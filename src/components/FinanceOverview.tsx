@@ -25,7 +25,7 @@ export type FinanceDoc = {
   uploadedAt: string;
 };
 
-const COLORS = ["#0f766e", "#0ea5e9", "#f59e0b", "#8b5cf6", "#ec4899", "#22c55e", "#ef4444", "#64748b", "#14b8a6", "#f97316"];
+const COLORS = ["#4f46e5", "#0ea5e9", "#f59e0b", "#8b5cf6", "#ec4899", "#22c55e", "#ef4444", "#64748b", "#14b8a6", "#f97316"];
 
 type GroupBy = "record" | "type";
 type Slice = { name: string; value: number };
