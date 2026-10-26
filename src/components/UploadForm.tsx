@@ -1,5 +1,6 @@
 "use client";
 
+import { MonthPicker, moveToMonth } from "./MonthPicker";
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { Plus, Trash2, Upload, FileText } from "lucide-react";
@@ -33,6 +34,7 @@ export function UploadForm({
   const [notes, setNotes] = useState("");
   const [externalLink, setExternalLink] = useState("");
   const [amount, setAmount] = useState("");
+  const [forMonth, setForMonth] = useState(""); // "" = החודש הנוכחי (ברירת מחדל)
   const [isMonthlyPayment, setIsMonthlyPayment] = useState(false);
   const [monthlyAmount, setMonthlyAmount] = useState("");
   const [finance, setFinance] = useState<FinanceFormValues>(EMPTY_FINANCE_VALUES);
@@ -107,6 +109,18 @@ export function UploadForm({
         attachments.push(uploadData);
       }
 
+      // הוצאה/הכנסה לחודש אחר: התאריך נקבע לאותו יום בחודש שנבחר
+      const isFlow = category === "הוצאות" || category === "הכנסות";
+      let uploadedAt: string | undefined;
+      if (isFlow && forMonth) {
+        const today = new Date();
+        const nowKey = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, "0")}`;
+        if (forMonth !== nowKey) {
+          const todayStr = `${nowKey}-${String(today.getDate()).padStart(2, "0")}`;
+          uploadedAt = new Date(`${moveToMonth(todayStr, forMonth)}T12:00:00`).toISOString();
+        }
+      }
+
       const finalSubcategory = newSubcategory.trim() || subcategory || undefined;
 
       const res = await fetch("/api/documents", {
@@ -122,6 +136,7 @@ export function UploadForm({
           dueDate: dueDate || undefined,
           dueDateTitle: dueDate ? dueDateTitle || undefined : undefined,
           amount: amount ? Number(amount) : undefined,
+          uploadedAt,
           isMonthlyPayment,
           monthlyAmount: isMonthlyPayment && monthlyAmount ? Number(monthlyAmount) : undefined,
           attachments,
@@ -206,6 +221,16 @@ export function UploadForm({
           required
         />
       </div>
+
+      {(category === "הוצאות" || category === "הכנסות") && (
+        <div>
+          <label className="label">החודש שאליו שייכת {category === "הוצאות" ? "ההוצאה" : "ההכנסה"}</label>
+          <MonthPicker
+            value={forMonth || currentMonthKey()}
+            onChange={setForMonth}
+          />
+        </div>
+      )}
 
       {isFinancial && (
         <div className="grid grid-cols-2 gap-3">
@@ -366,4 +391,9 @@ export function UploadForm({
       </button>
     </form>
   );
+}
+
+function currentMonthKey() {
+  const d = new Date();
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
 }

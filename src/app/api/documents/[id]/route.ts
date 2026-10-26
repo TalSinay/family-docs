@@ -74,12 +74,6 @@ export async function PATCH(
   if ("category" in update && !(MAIN_CATEGORIES as readonly string[]).includes(String(update.category))) {
     return NextResponse.json({ error: "קטגוריה לא מוכרת" }, { status: 400 });
   }
-  // תאריך הרשומה (למשל תאריך הוצאה): תאריך תקין שאינו בעתיד הרחוק
-  if ("uploadedAt" in update) {
-    const t = Date.parse(String(update.uploadedAt));
-    if (Number.isNaN(t) || t > Date.now() + 36 * 3600 * 1000) delete update.uploadedAt;
-    else update.uploadedAt = new Date(t);
-  }
   if ("subcategory" in update) update.subcategory = String(update.subcategory ?? "").trim() || null;
   // "" נשלח כדי לנקות תאריך יעד קיים
   if (update.dueDate === "") update.dueDate = null;
@@ -93,6 +87,20 @@ export async function PATCH(
   if ("dueDate" in update || "notifyTime" in update) update.lastNotifiedOn = null;
 
   await connectToDatabase();
+
+  // תאריך הרשומה (למשל תאריך הוצאה): תאריך תקין. בהוצאות/הכנסות מותר גם עתידי
+  // (עד 3 שנים, "לאיזה חודש שייכת הרשומה"); בשאר הקטגוריות לא בעתיד הרחוק.
+  if ("uploadedAt" in update) {
+    const t = Date.parse(String(update.uploadedAt));
+    let ok = !Number.isNaN(t);
+    if (ok && t > Date.now() + 36 * 3600 * 1000) {
+      const cur = await DocumentModel.findOne({ _id: id, workspaceId }).select("category").lean<{ category: string }>();
+      const cat = String(update.category ?? cur?.category ?? "");
+      ok = (cat === "הוצאות" || cat === "הכנסות") && t < Date.now() + 3 * 365 * 86400000;
+    }
+    if (ok) update.uploadedAt = new Date(t);
+    else delete update.uploadedAt;
+  }
 
   // כמו ב-POST: מסננים attachments לכאלה שהועלו בפועל ב-workspace הפעיל, כדי
   // שלא ניתן יהיה "לקשר" קובץ שהועלה ב-workspace אחר למסמך קיים.

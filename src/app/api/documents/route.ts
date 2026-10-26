@@ -58,9 +58,11 @@ export async function POST(req: NextRequest) {
     uploadedAt,
   } = body;
   // תאריך מותאם (למשל "שילמתי אתמול") - רק תאריך תקין שאינו בעתיד הרחוק
+  // בהוצאות/הכנסות מותר גם תאריך עתידי (עד 3 שנים) - "לאיזה חודש שייכת הרשומה"
+  const futureOk = category === "הוצאות" || category === "הכנסות";
   const customUploadedAt =
     typeof uploadedAt === "string" && !Number.isNaN(Date.parse(uploadedAt)) &&
-    Date.parse(uploadedAt) < Date.now() + 36 * 3600 * 1000
+    Date.parse(uploadedAt) < Date.now() + (futureOk ? 3 * 365 * 86400000 : 36 * 3600 * 1000)
       ? new Date(uploadedAt)
       : undefined;
   const finance = category === "פיננסים" ? sanitizeFinanceFields(body) : {};

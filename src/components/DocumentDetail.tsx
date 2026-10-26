@@ -1,5 +1,6 @@
 "use client";
 
+import { MonthPicker, moveToMonth } from "./MonthPicker";
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import {
@@ -394,6 +395,15 @@ export function DocumentDetail({ doc: initialDoc }: { doc: DocData }) {
                 className="input"
                 value={plainAmount}
                 onChange={(e) => setPlainAmount(e.target.value)}
+              />
+            </div>
+          )}
+          {(doc.category === "הוצאות" || doc.category === "הכנסות") && (
+            <div>
+              <label className="label">שייך לחודש</label>
+              <MonthPicker
+                value={recordDate.slice(0, 7)}
+                onChange={(m) => setRecordDate(moveToMonth(recordDate || originalDate, m))}
               />
             </div>
           )}
