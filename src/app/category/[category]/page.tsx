@@ -9,6 +9,7 @@ import Workspace from "@/lib/models/Workspace";
 import { DocumentCard } from "@/components/DocumentCard";
 import { EmptyState } from "@/components/EmptyState";
 import { computeBankEffective } from "@/lib/bank";
+import { MonthlyFlowChart } from "@/components/MonthlyFlowChart";
 import { FinanceOverview, FinanceDoc } from "@/components/FinanceOverview";
 import { DEFAULT_SUBCATEGORIES, MAIN_CATEGORIES, MainCategory } from "@/lib/categories";
 import clsx from "clsx";
@@ -112,6 +113,10 @@ export default async function CategoryPage({
           ))}
         </div>
       )}
+
+      {category === "פיננסים" && <MonthlyFlowChart mode="both" />}
+      {category === "הכנסות" && <MonthlyFlowChart mode="income" />}
+      {category === "הוצאות" && <MonthlyFlowChart mode="expense" />}
 
       {category === "פיננסים" ? (
         <FinanceOverview
