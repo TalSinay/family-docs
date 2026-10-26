@@ -11,7 +11,7 @@ import { DEFAULT_EVENT_COLOR, DEFAULT_TASK_COLOR } from "@/lib/itemColors";
 import { ColorPicker } from "./ColorPicker";
 
 type Holiday = { date: string; title: string };
-type EventItem = { _id: string; title: string; date: string; notes?: string; color?: string };
+type EventItem = { _id: string; title: string; date: string; endDate?: string; notes?: string; color?: string };
 type TaskItem = { _id: string; title: string; dueDate?: string; isDone: boolean; color?: string };
 type DocDue = { _id: string; title: string; dueDate?: string; dueDateTitle?: string };
 
@@ -23,7 +23,16 @@ type CalItem = {
   done?: boolean;
   notes?: string;
   color?: string;
+  range?: string; // תווית טווח לאירוע רב-יומי, למשל "12.11–16.11"
+  date?: string;
+  endDate?: string;
 };
+
+// יום מתוך אירוע רב-יומי בתא של רשת החודש: ה"פס" מצויר פעם אחת בתחילת כל שורה (שבוע), ובשאר התאים ממלאים מקום
+type SpanCell =
+  | { type: "bar"; ev: EventItem; cells: number } // תחילת קטע: פס שמתפרש על כמה תאים
+  | { type: "fill" } // המשך פס שכבר צויר
+  | { type: "empty" }; // שורה פנויה בתא, לשמירת יישור
 
 const WEEKDAYS = ["א", "ב", "ג", "ד", "ה", "ו", "ש"];
 
@@ -35,6 +44,22 @@ const DEFAULT_KIND_COLOR: Record<CalItem["kind"], string> = {
   task: DEFAULT_TASK_COLOR,
   document: "#f97316", // orange-500
 };
+
+function addDaysStr(dateStr: string, n: number) {
+  const [y, m, d] = dateStr.split("-").map(Number);
+  return ymd(new Date(y, m - 1, d + n));
+}
+
+function dayDiffStr(a: string, b: string) {
+  const [ay, am, ad] = a.split("-").map(Number);
+  const [by, bm, bd] = b.split("-").map(Number);
+  return Math.round((Date.UTC(by, bm - 1, bd) - Date.UTC(ay, am - 1, ad)) / 86400000);
+}
+
+function shortDate(dateStr: string) {
+  const [, m, d] = dateStr.split("-").map(Number);
+  return `${d}.${m}`;
+}
 
 function ymd(d: Date) {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
@@ -68,12 +93,15 @@ export function CalendarView() {
   const [newEventTitle, setNewEventTitle] = useState("");
   const [newEventNotes, setNewEventNotes] = useState("");
   const [newEventColor, setNewEventColor] = useState(DEFAULT_EVENT_COLOR);
+  const [newEventEnd, setNewEventEnd] = useState("");
 
   // עריכת אירוע קיים (נפתח inline בתוך הרשימה, ראו renderItemRow)
   const [editingEventId, setEditingEventId] = useState<string | null>(null);
   const [editTitle, setEditTitle] = useState("");
   const [editNotes, setEditNotes] = useState("");
   const [editColor, setEditColor] = useState(DEFAULT_EVENT_COLOR);
+  const [editDate, setEditDate] = useState("");
+  const [editEnd, setEditEnd] = useState("");
 
   useEffect(() => {
     const now = new Date();
@@ -158,7 +186,8 @@ export function CalendarView() {
     };
 
     for (const h of holidays) push(h.date, { key: `h-${h.date}-${h.title}`, kind: "holiday", title: h.title });
-    for (const e of events)
+    for (const e of events) {
+      if (e.endDate && e.endDate > e.date) continue; // אירועים רב-יומיים: ראו multiDay
       push(e.date, {
         key: `e-${e._id}`,
         kind: "event",
@@ -166,7 +195,9 @@ export function CalendarView() {
         id: e._id,
         notes: e.notes,
         color: e.color,
+        date: e.date,
       });
+    }
     for (const t of tasks) {
       if (!t.dueDate) continue;
       push(t.dueDate, {
@@ -185,8 +216,74 @@ export function CalendarView() {
     return map;
   }, [holidays, events, tasks, docDues]);
 
+  // אירועים רב-יומיים (מתחילים ב-date ונגמרים ב-endDate, כולל), ממוינים לפי התחלה
+  const multiDay = useMemo(
+    () =>
+      events
+        .filter((e) => e.endDate && e.endDate > e.date)
+        .sort((a, b) => a.date.localeCompare(b.date) || a._id.localeCompare(b._id)),
+    [events]
+  );
+
+  // שיבוץ כל אירוע רב-יומי לשורה (slot) קבועה לאורך כל ימיו, כדי שהפס יהיה ברצף אופקי
+  const slotOf = useMemo(() => {
+    const used = new Map<string, Set<number>>(); // יום -> שורות תפוסות
+    const result = new Map<string, number>();
+    for (const e of multiDay) {
+      const total = dayDiffStr(e.date, e.endDate!) + 1;
+      let slot = 0;
+      for (;; slot++) {
+        let free = true;
+        for (let i = 0; i < total && free; i++) {
+          if (used.get(addDaysStr(e.date, i))?.has(slot)) free = false;
+        }
+        if (free) break;
+      }
+      for (let i = 0; i < total; i++) {
+        const k = addDaysStr(e.date, i);
+        if (!used.has(k)) used.set(k, new Set());
+        used.get(k)!.add(slot);
+      }
+      result.set(e._id, slot);
+    }
+    return result;
+  }, [multiDay]);
+
+  // השורות של האירועים הרב-יומיים בתא של יום מסוים (לרשת החודש)
+  function spanCellsForDay(dateStr: string, weekday: number, dayOfMonth: number): SpanCell[] {
+    const cells: SpanCell[] = [];
+    for (const e of multiDay) {
+      if (dateStr < e.date || dateStr > e.endDate!) continue;
+      const slot = slotOf.get(e._id) ?? 0;
+      while (cells.length <= slot) cells.push({ type: "empty" });
+      const startsHere = dateStr === e.date || weekday === 0 || dayOfMonth === 1;
+      if (startsHere) {
+        const remainingInRow = 7 - weekday; // כולל היום הזה (ראשון=0 הוא העמודה הראשונה מימין)
+        const remainingInEvent = dayDiffStr(dateStr, e.endDate!) + 1;
+        cells[slot] = { type: "bar", ev: e, cells: Math.min(remainingInRow, remainingInEvent) };
+      } else {
+        cells[slot] = { type: "fill" };
+      }
+    }
+    return cells;
+  }
+
+  // כל הפריטים של יום (לרשימת הפירוט): כולל אירועים רב-יומיים שחולפים בו
   function itemsForDay(dateStr: string): CalItem[] {
-    return itemsByDay.get(dateStr) || [];
+    const spans: CalItem[] = multiDay
+      .filter((e) => dateStr >= e.date && dateStr <= e.endDate!)
+      .map((e) => ({
+        key: `e-${e._id}`,
+        kind: "event" as const,
+        title: e.title,
+        id: e._id,
+        notes: e.notes,
+        color: e.color,
+        range: `${shortDate(e.date)}–${shortDate(e.endDate!)}`,
+        date: e.date,
+        endDate: e.endDate,
+      }));
+    return [...spans, ...(itemsByDay.get(dateStr) || [])];
   }
 
   async function addEvent() {
@@ -197,11 +294,13 @@ export function CalendarView() {
       body: JSON.stringify({
         title: newEventTitle,
         date: selectedDay,
+        endDate: newEventEnd && newEventEnd > selectedDay ? newEventEnd : undefined,
         notes: newEventNotes,
         color: newEventColor,
       }),
     });
     if (res.ok) {
+      setNewEventEnd("");
       setNewEventTitle("");
       setNewEventNotes("");
       setNewEventColor(DEFAULT_EVENT_COLOR);
@@ -220,6 +319,8 @@ export function CalendarView() {
     setEditTitle(item.title);
     setEditNotes(item.notes || "");
     setEditColor(item.color || DEFAULT_EVENT_COLOR);
+    setEditDate(item.date || selectedDay);
+    setEditEnd(item.endDate || "");
   }
 
   function cancelEditEvent() {
@@ -231,7 +332,13 @@ export function CalendarView() {
     const res = await fetch(`/api/calendar-events/${editingEventId}`, {
       method: "PATCH",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ title: editTitle.trim(), notes: editNotes, color: editColor }),
+      body: JSON.stringify({
+        title: editTitle.trim(),
+        notes: editNotes,
+        color: editColor,
+        date: editDate,
+        endDate: editEnd && editEnd > editDate ? editEnd : "",
+      }),
     });
     if (res.ok) {
       setEditingEventId(null);
@@ -278,6 +385,16 @@ export function CalendarView() {
               onChange={(e) => setEditNotes(e.target.value)}
               placeholder="הערות (אופציונלי)"
             />
+            <div className="grid grid-cols-2 gap-2">
+              <label className="text-xs text-slate-500">
+                מתאריך
+                <input type="date" className="input mt-1" value={editDate} onChange={(e) => setEditDate(e.target.value)} />
+              </label>
+              <label className="text-xs text-slate-500">
+                עד תאריך (אופציונלי)
+                <input type="date" className="input mt-1" min={editDate} value={editEnd} onChange={(e) => setEditEnd(e.target.value)} />
+              </label>
+            </div>
             <ColorPicker value={editColor} onChange={setEditColor} />
             <div className="flex gap-2">
               <button onClick={saveEditEvent} className="btn-primary flex items-center gap-1 text-sm px-3 py-1.5">
@@ -301,6 +418,7 @@ export function CalendarView() {
         >
           <div dir="auto">
             <p className="font-medium text-sm">{item.title}</p>
+            {item.range && <p className="text-xs opacity-80">{item.range} · אירוע רב-יומי</p>}
             {item.notes && <p className="text-xs opacity-80">{item.notes}</p>}
           </div>
           <div className="flex items-center gap-1 shrink-0">
@@ -375,8 +493,9 @@ export function CalendarView() {
           {days.map((d, i) => {
             if (!d) return <div key={i} />;
             const dateStr = ymd(d);
-            const dayItems = itemsForDay(dateStr);
-            const visibleItems = dayItems.slice(0, 4);
+            const spanCells = spanCellsForDay(dateStr, d.getDay(), d.getDate());
+            const dayItems = itemsByDay.get(dateStr) || [];
+            const visibleItems = dayItems.slice(0, Math.max(0, 4 - spanCells.length));
             const overflowCount = dayItems.length - visibleItems.length;
             const isToday = dateStr === todayStr;
             const isSelected = dateStr === selectedDay;
@@ -398,6 +517,29 @@ export function CalendarView() {
                 >
                   {d.getDate()}
                 </span>
+                {spanCells.map((c, si) => {
+                  if (c.type === "empty" || c.type === "fill") return <span key={si} className="h-[14px] shrink-0" />;
+                  const color = c.ev.color || DEFAULT_KIND_COLOR.event;
+                  const startsEvent = dateStr === c.ev.date;
+                  const endsEvent = addDaysStr(dateStr, c.cells - 1) === c.ev.endDate;
+                  return (
+                    <span
+                      key={si}
+                      dir="auto"
+                      className={clsx(
+                        "relative z-10 h-[14px] shrink-0 text-[9.5px] sm:text-[10.5px] leading-[14px] px-1 truncate text-white",
+                        startsEvent ? "rounded-r-[3px]" : "",
+                        endsEvent ? "rounded-l-[3px]" : ""
+                      )}
+                      style={{
+                        backgroundColor: color,
+                        width: `calc(${c.cells * 100}% + ${(c.cells - 1) * 9}px)`,
+                      }}
+                    >
+                      {c.ev.title}
+                    </span>
+                  );
+                })}
                 {visibleItems.map((item) => (
                   <span
                     key={item.key}
@@ -459,6 +601,16 @@ export function CalendarView() {
                 value={newEventNotes}
                 onChange={(e) => setNewEventNotes(e.target.value)}
               />
+              <label className="block text-xs text-slate-500">
+                עד תאריך (לאירוע של כמה ימים, אופציונלי)
+                <input
+                  type="date"
+                  className="input mt-1"
+                  min={selectedDay}
+                  value={newEventEnd}
+                  onChange={(e) => setNewEventEnd(e.target.value)}
+                />
+              </label>
               <ColorPicker value={newEventColor} onChange={setNewEventColor} />
               <button onClick={addEvent} className="btn-primary w-full flex items-center justify-center gap-2">
                 <Plus size={16} /> הוסף אירוע

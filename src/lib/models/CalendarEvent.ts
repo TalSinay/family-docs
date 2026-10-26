@@ -8,7 +8,8 @@ export interface ICalendarEvent {
   _id: mongoose.Types.ObjectId;
   workspaceId: mongoose.Types.ObjectId;
   title: string;
-  date: string; // "YYYY-MM-DD"
+  date: string; // "YYYY-MM-DD" (יום התחלה)
+  endDate?: string; // "YYYY-MM-DD" - יום סיום לאירוע רב-יומי (כולל); ריק = אירוע ליום אחד
   notes?: string;
   color?: string; // hex, ראו src/lib/itemColors.ts - ריק = הצבע הקבוע הישן (טיל)
   createdBy: mongoose.Types.ObjectId;
@@ -19,6 +20,7 @@ const CalendarEventSchema = new Schema<ICalendarEvent>({
   workspaceId: { type: Schema.Types.ObjectId, ref: "Workspace", required: true },
   title: { type: String, required: true },
   date: { type: String, required: true },
+  endDate: { type: String },
   notes: { type: String },
   color: { type: String },
   createdBy: { type: Schema.Types.ObjectId, ref: "User", required: true },
