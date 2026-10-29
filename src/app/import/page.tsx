@@ -9,7 +9,7 @@ import { ArrowRight, Upload, CheckCircle2 } from "lucide-react";
 type Row = Record<string, string>;
 type Kind = "הוצאות" | "הכנסות";
 type ParsedEntry = { title: string; amount: number; date: string; rawIndex: number; kind: Kind };
-type Mode = "sign" | Kind;
+type FileType = "card" | "bank"; // כרטיס אשראי: הכל הוצאות. בנק: הוצאות והכנסות
 
 const DATE_HINTS = ["תאריך עסקה", "תאריך רכישה", "תאריך חיוב", "תאריך"];
 const TITLE_HINTS = ["שם בית העסק", "בית עסק", "שם בית עסק", "תיאור", "פירוט", "שם העסק"];
@@ -73,7 +73,7 @@ export default function ImportPage() {
   const [titleCol, setTitleCol] = useState("");
   const [amountCol, setAmountCol] = useState("");
   const [creditCol, setCreditCol] = useState("");
-  const [mode, setMode] = useState<Mode>("הוצאות");
+  const [fileType, setFileType] = useState<FileType>("card");
   const [flipSign, setFlipSign] = useState(false);
   const [subcategory, setSubcategory] = useState("Max");
   const [parseError, setParseError] = useState("");
@@ -114,9 +114,9 @@ export default function ImportPage() {
     // קובץ עם עמודת "זכות" נפרדת (בנק): החובה היא הוצאה והזכות היא הכנסה
     const creditGuess = guessColumn(cols, CREDIT_HINTS);
     setCreditCol(creditGuess && creditGuess !== amountGuess ? creditGuess : "");
-    // אם בעמודת הסכום יש גם סכומים שליליים וגם חיוביים - מזהים הוצאה/הכנסה לפי הסימן
-    const signs = amountGuess ? data.map((r) => parseSigned(r[amountGuess] || "")).filter((n): n is number => !!n) : [];
-    setMode(signs.some((n) => n < 0) && signs.some((n) => n > 0) ? "sign" : "הוצאות");
+    // ברירת מחדל: כרטיס אשראי (הכל הוצאות). קובץ בנק מזוהה לפי עמודת "זכות" או "יתרה"
+    const looksBank = (creditGuess && creditGuess !== amountGuess) || cols.some((c) => c.trim() === "יתרה" || c.includes("יתרה"));
+    setFileType(looksBank ? "bank" : "card");
   }
 
   async function handleFile(file: File) {
@@ -173,8 +173,14 @@ export default function ImportPage() {
       const main = parseSigned(row[amountCol] || "");
       let kind: Kind | null = null;
       let amount = 0;
-      if (creditCol) {
-        // עמודות נפרדות: זכות = הכנסה, חובה = הוצאה
+      if (fileType === "card") {
+        // כרטיס אשראי: חיוב חיובי = הוצאה. סכום שלילי הוא זיכוי/ביטול ולא מיובא
+        if (main && main > 0) {
+          kind = "הוצאות";
+          amount = main;
+        }
+      } else if (creditCol) {
+        // בנק עם עמודות נפרדות: זכות = הכנסה, חובה = הוצאה
         const credit = parseSigned(row[creditCol] || "");
         if (credit) {
           kind = "הכנסות";
@@ -184,20 +190,21 @@ export default function ImportPage() {
           amount = Math.abs(main);
         }
       } else if (main) {
+        // בנק עם עמודה אחת: שלילי = הוצאה, חיובי = הכנסה (אפשר להפוך)
         amount = Math.abs(main);
-        if (mode === "sign") {
-          const negative = flipSign ? main > 0 : main < 0;
-          kind = negative ? "הוצאות" : "הכנסות";
-        } else {
-          kind = mode;
-        }
+        const negative = flipSign ? main > 0 : main < 0;
+        kind = negative ? "הוצאות" : "הכנסות";
       }
       if (kind && amount > 0) out.push({ title, amount, date, rawIndex: i, kind });
     });
     return out;
-  }, [rows, dateCol, titleCol, amountCol, creditCol, mode, flipSign]);
+  }, [rows, dateCol, titleCol, amountCol, creditCol, fileType, flipSign]);
 
   const invalidCount = rows.length - entries.length;
+  const refundCount =
+    fileType === "card" && amountCol
+      ? rows.filter((r) => (parseSigned(r[amountCol] || "") ?? 0) < 0).length
+      : 0;
   const expenseTotal = entries.filter((e) => e.kind === "הוצאות").reduce((t, e) => t + e.amount, 0);
   const incomeTotal = entries.filter((e) => e.kind === "הכנסות").reduce((t, e) => t + e.amount, 0);
   const expenseCount = entries.filter((e) => e.kind === "הוצאות").length;
@@ -300,7 +307,7 @@ export default function ImportPage() {
                 </select>
               </div>
               <div>
-                <label className="label">{creditCol ? "עמודת חובה (הוצאה)" : "עמודת סכום"}</label>
+                <label className="label">{fileType === "bank" && creditCol ? "עמודת חובה (הוצאה)" : "עמודת סכום"}</label>
                 <select className="input" value={amountCol} onChange={(e) => setAmountCol(e.target.value)}>
                   <option value="">בחר עמודה...</option>
                   {headers.map((h) => (
@@ -314,25 +321,24 @@ export default function ImportPage() {
 
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
               <div>
-                <label className="label">עמודת זכות / הכנסה (אם יש בקובץ)</label>
-                <select className="input" value={creditCol} onChange={(e) => setCreditCol(e.target.value)}>
-                  <option value="">אין - עמודה אחת של סכום</option>
-                  {headers.map((h) => (
-                    <option key={h} value={h}>
-                      {h}
-                    </option>
-                  ))}
+                <label className="label">סוג הקובץ</label>
+                <select className="input" value={fileType} onChange={(e) => setFileType(e.target.value as FileType)}>
+                  <option value="card">כרטיס אשראי - הכל הוצאות</option>
+                  <option value="bank">חשבון בנק - הוצאות והכנסות</option>
                 </select>
               </div>
-              {!creditCol && (
+              {fileType === "bank" && (
                 <div>
-                  <label className="label">איך לזהות הוצאה והכנסה</label>
-                  <select className="input" value={mode} onChange={(e) => setMode(e.target.value as Mode)}>
-                    <option value="sign">לפי הסימן: שלילי = הוצאה, חיובי = הכנסה</option>
-                    <option value="הוצאות">הכל הוצאות</option>
-                    <option value="הכנסות">הכל הכנסות</option>
+                  <label className="label">עמודת זכות / הכנסה (אם יש בקובץ)</label>
+                  <select className="input" value={creditCol} onChange={(e) => setCreditCol(e.target.value)}>
+                    <option value="">אין - עמודה אחת: שלילי = הוצאה, חיובי = הכנסה</option>
+                    {headers.map((h) => (
+                      <option key={h} value={h}>
+                        {h}
+                      </option>
+                    ))}
                   </select>
-                  {mode === "sign" && (
+                  {!creditCol && (
                     <label className="flex items-center gap-2 text-xs text-slate-500 mt-2">
                       <input type="checkbox" checked={flipSign} onChange={(e) => setFlipSign(e.target.checked)} />
                       הפוך: חיובי = הוצאה, שלילי = הכנסה
@@ -360,6 +366,9 @@ export default function ImportPage() {
                 תקינות מתוך {rows.length} שורות בקובץ
                 {invalidCount > 0 && (
                   <span className="text-amber-600"> ({invalidCount} שורות לא זוהו ודולגו)</span>
+                )}
+                {refundCount > 0 && (
+                  <span className="text-amber-600"> ({refundCount} זיכויים/ביטולים בסכום שלילי לא יובאו)</span>
                 )}
                 .
               </p>
