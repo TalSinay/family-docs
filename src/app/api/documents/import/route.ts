@@ -5,7 +5,7 @@ import DocumentModel from "@/lib/models/Document";
 import SubCategory from "@/lib/models/SubCategory";
 import { MainCategory } from "@/lib/categories";
 
-type ImportEntry = { title: string; amount: number; date: string };
+type ImportEntry = { title: string; amount: number; date: string; category: MainCategory };
 
 const MAX_ENTRIES = 3000;
 const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
@@ -42,8 +42,10 @@ export async function POST(req: NextRequest) {
     const title = String(e.title || "").trim();
     const amount = Number(e.amount);
     const date = String(e.date || "");
+    // סוג לכל שורה בנפרד (קובץ בנק מכיל גם הוצאות וגם הכנסות); בלי סוג - קטגוריית ברירת המחדל של הבקשה
+    const entryCategory: MainCategory = e.category === "הכנסות" || e.category === "הוצאות" ? e.category : targetCategory;
     if (!title || !Number.isFinite(amount) || amount <= 0 || !DATE_RE.test(date)) continue;
-    valid.push({ title, amount, date });
+    valid.push({ title, amount, date, category: entryCategory });
   }
 
   if (valid.length === 0) {
@@ -53,11 +55,13 @@ export async function POST(req: NextRequest) {
   await connectToDatabase();
 
   if (subcategory) {
-    await SubCategory.updateOne(
-      { workspaceId, category: targetCategory, name: subcategory },
-      { $setOnInsert: { workspaceId, category: targetCategory, name: subcategory } },
-      { upsert: true }
-    );
+    for (const cat of new Set(valid.map((v) => v.category))) {
+      await SubCategory.updateOne(
+        { workspaceId, category: cat, name: subcategory },
+        { $setOnInsert: { workspaceId, category: cat, name: subcategory } },
+        { upsert: true }
+      );
+    }
   }
 
   // בדיקת כפילויות מול מה שכבר קיים ב-workspace (לדוגמה אם הועלה אותו חודש פעמיים):
@@ -70,21 +74,21 @@ export async function POST(req: NextRequest) {
 
   const existing = await DocumentModel.find({
     workspaceId,
-    category: targetCategory,
+    category: { $in: ["הוצאות", "הכנסות"] },
     uploadedAt: { $gte: minDate, $lt: maxDate },
   })
-    .select("title amount uploadedAt")
+    .select("title category amount uploadedAt")
     .lean();
 
   const seen = new Set(
-    existing.map((d) => signature(d.title, d.amount ?? 0, d.uploadedAt as Date))
+    existing.map((d) => signature(d.category, d.title, d.amount ?? 0, d.uploadedAt as Date))
   );
 
   const toCreate: Record<string, unknown>[] = [];
   let skipped = 0;
   for (const entry of valid) {
     const uploadedAt = parseLocalDate(entry.date);
-    const sig = signature(entry.title, entry.amount, uploadedAt);
+    const sig = signature(entry.category, entry.title, entry.amount, uploadedAt);
     if (seen.has(sig)) {
       skipped++;
       continue;
@@ -93,7 +97,7 @@ export async function POST(req: NextRequest) {
     toCreate.push({
       workspaceId,
       title: entry.title,
-      category: targetCategory,
+      category: entry.category,
       subcategory: subcategory || undefined,
       notes: "יובא אוטומטית מקובץ תנועות (Max)",
       amount: entry.amount,
@@ -110,6 +114,8 @@ export async function POST(req: NextRequest) {
 
   return NextResponse.json({
     created: toCreate.length,
+    createdIncome: toCreate.filter((d) => d.category === "הכנסות").length,
+    createdExpenses: toCreate.filter((d) => d.category === "הוצאות").length,
     skipped,
     total: valid.length,
   });
@@ -122,9 +128,9 @@ function parseLocalDate(dateStr: string): Date {
   return new Date(y, m - 1, d);
 }
 
-function signature(title: string, amount: number, date: Date): string {
+function signature(category: string, title: string, amount: number, date: Date): string {
   const day = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}-${String(
     date.getDate()
   ).padStart(2, "0")}`;
-  return `${day}|${Math.round(amount * 100)}|${title.trim().toLowerCase()}`;
+  return `${category}|${day}|${Math.round(amount * 100)}|${title.trim().toLowerCase()}`;
 }

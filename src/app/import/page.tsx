@@ -7,11 +7,14 @@ import { readSheet } from "read-excel-file/browser";
 import { ArrowRight, Upload, CheckCircle2 } from "lucide-react";
 
 type Row = Record<string, string>;
-type ParsedEntry = { title: string; amount: number; date: string; rawIndex: number };
+type Kind = "הוצאות" | "הכנסות";
+type ParsedEntry = { title: string; amount: number; date: string; rawIndex: number; kind: Kind };
+type Mode = "sign" | Kind;
 
 const DATE_HINTS = ["תאריך עסקה", "תאריך רכישה", "תאריך חיוב", "תאריך"];
 const TITLE_HINTS = ["שם בית העסק", "בית עסק", "שם בית עסק", "תיאור", "פירוט", "שם העסק"];
-const AMOUNT_HINTS = ["סכום חיוב", "סכום עסקה", "סכום לחיוב", "סכום", "סכום בש\"ח"];
+const AMOUNT_HINTS = ["סכום חיוב", "סכום עסקה", "סכום לחיוב", "סכום", "סכום בש\"ח", "חובה", "סכום בחובה"];
+const CREDIT_HINTS = ["זכות", "סכום בזכות", "הפקדה"];
 
 function guessColumn(headers: string[], hints: string[]): string {
   for (const hint of hints) {
@@ -47,13 +50,17 @@ function parseDate(raw: string): string | null {
   return null;
 }
 
-// מסיר סימן ₪, פסיקים, רווחים וכו', ולוקח ערך מוחלט (חיוב באשראי תמיד מוצג כהוצאה חיובית כאן).
-function parseAmount(raw: string): number | null {
-  const cleaned = raw.replace(/[^\d.\-]/g, "");
-  if (!cleaned) return null;
-  const n = Number(cleaned);
+// מסיר סימן ₪, פסיקים, רווחים וכו' ומחזיר ערך עם סימן. שלילי מזוהה לפי "-" בתחילה או בסוף
+// ("12,000-" כמו בקבצי בנק מסוימים) או סוגריים "(12,000)".
+function parseSigned(raw: string): number | null {
+  const s = raw.trim();
+  if (!s) return null;
+  const negative = /^[\s₪]*[-−–]/.test(s) || /[-−–]\s*$/.test(s) || /^\(.*\)$/.test(s);
+  const digits = s.replace(/[^\d.]/g, "");
+  if (!digits) return null;
+  const n = Number(digits);
   if (!Number.isFinite(n)) return null;
-  return Math.abs(n);
+  return negative ? -n : n;
 }
 
 export default function ImportPage() {
@@ -65,7 +72,9 @@ export default function ImportPage() {
   const [dateCol, setDateCol] = useState("");
   const [titleCol, setTitleCol] = useState("");
   const [amountCol, setAmountCol] = useState("");
-  const [category, setCategory] = useState<"הוצאות" | "הכנסות">("הוצאות");
+  const [creditCol, setCreditCol] = useState("");
+  const [mode, setMode] = useState<Mode>("הוצאות");
+  const [flipSign, setFlipSign] = useState(false);
   const [subcategory, setSubcategory] = useState("Max");
   const [parseError, setParseError] = useState("");
   const [submitting, setSubmitting] = useState(false);
@@ -100,7 +109,14 @@ export default function ImportPage() {
     setRows(data);
     setDateCol(guessColumn(cols, DATE_HINTS));
     setTitleCol(guessColumn(cols, TITLE_HINTS));
-    setAmountCol(guessColumn(cols, AMOUNT_HINTS));
+    const amountGuess = guessColumn(cols, AMOUNT_HINTS);
+    setAmountCol(amountGuess);
+    // קובץ עם עמודת "זכות" נפרדת (בנק): החובה היא הוצאה והזכות היא הכנסה
+    const creditGuess = guessColumn(cols, CREDIT_HINTS);
+    setCreditCol(creditGuess && creditGuess !== amountGuess ? creditGuess : "");
+    // אם בעמודת הסכום יש גם סכומים שליליים וגם חיוביים - מזהים הוצאה/הכנסה לפי הסימן
+    const signs = amountGuess ? data.map((r) => parseSigned(r[amountGuess] || "")).filter((n): n is number => !!n) : [];
+    setMode(signs.some((n) => n < 0) && signs.some((n) => n > 0) ? "sign" : "הוצאות");
   }
 
   async function handleFile(file: File) {
@@ -152,17 +168,40 @@ export default function ImportPage() {
     const out: ParsedEntry[] = [];
     rows.forEach((row, i) => {
       const date = parseDate(row[dateCol] || "");
-      const amount = parseAmount(row[amountCol] || "");
       const title = (row[titleCol] || "").trim();
-      if (date && amount && amount > 0 && title) {
-        out.push({ title, amount, date, rawIndex: i });
+      if (!date || !title) return;
+      const main = parseSigned(row[amountCol] || "");
+      let kind: Kind | null = null;
+      let amount = 0;
+      if (creditCol) {
+        // עמודות נפרדות: זכות = הכנסה, חובה = הוצאה
+        const credit = parseSigned(row[creditCol] || "");
+        if (credit) {
+          kind = "הכנסות";
+          amount = Math.abs(credit);
+        } else if (main) {
+          kind = "הוצאות";
+          amount = Math.abs(main);
+        }
+      } else if (main) {
+        amount = Math.abs(main);
+        if (mode === "sign") {
+          const negative = flipSign ? main > 0 : main < 0;
+          kind = negative ? "הוצאות" : "הכנסות";
+        } else {
+          kind = mode;
+        }
       }
+      if (kind && amount > 0) out.push({ title, amount, date, rawIndex: i, kind });
     });
     return out;
-  }, [rows, dateCol, titleCol, amountCol]);
+  }, [rows, dateCol, titleCol, amountCol, creditCol, mode, flipSign]);
 
   const invalidCount = rows.length - entries.length;
-  const totalAmount = entries.reduce((sum, e) => sum + e.amount, 0);
+  const expenseTotal = entries.filter((e) => e.kind === "הוצאות").reduce((t, e) => t + e.amount, 0);
+  const incomeTotal = entries.filter((e) => e.kind === "הכנסות").reduce((t, e) => t + e.amount, 0);
+  const expenseCount = entries.filter((e) => e.kind === "הוצאות").length;
+  const incomeCount = entries.length - expenseCount;
 
   async function submitImport() {
     setSubmitting(true);
@@ -172,9 +211,8 @@ export default function ImportPage() {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          category,
           subcategory: subcategory.trim() || undefined,
-          entries: entries.map((e) => ({ title: e.title, amount: e.amount, date: e.date })),
+          entries: entries.map((e) => ({ title: e.title, amount: e.amount, date: e.date, category: e.kind })),
         }),
       });
       const data = await res.json();
@@ -195,7 +233,7 @@ export default function ImportPage() {
       </Link>
 
       <div>
-        <h1 className="text-xl font-bold">📥 ייבוא הוצאות מקובץ (למשל Max)</h1>
+        <h1 className="text-xl font-bold">📥 ייבוא הוצאות והכנסות מקובץ (בנק או אשראי)</h1>
         <p className="text-sm text-slate-500 mt-1">
           הורד מאתר/אפליקציית Max (או כל חברת אשראי אחרת) קובץ היסטוריית עסקאות, בפורמט CSV או
           Excel (.xlsx), והעלה אותו כאן ישירות - אין צורך בהמרה בין הפורמטים.
@@ -238,7 +276,7 @@ export default function ImportPage() {
         <>
           <section className="card p-5 space-y-4">
             <h2 className="font-bold text-lg">התאמת עמודות</h2>
-            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
               <div>
                 <label className="label">עמודת תאריך</label>
                 <select className="input" value={dateCol} onChange={(e) => setDateCol(e.target.value)}>
@@ -262,7 +300,7 @@ export default function ImportPage() {
                 </select>
               </div>
               <div>
-                <label className="label">עמודת סכום</label>
+                <label className="label">{creditCol ? "עמודת חובה (הוצאה)" : "עמודת סכום"}</label>
                 <select className="input" value={amountCol} onChange={(e) => setAmountCol(e.target.value)}>
                   <option value="">בחר עמודה...</option>
                   {headers.map((h) => (
@@ -276,16 +314,32 @@ export default function ImportPage() {
 
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
               <div>
-                <label className="label">קטגוריה לייבוא</label>
-                <select
-                  className="input"
-                  value={category}
-                  onChange={(e) => setCategory(e.target.value as "הוצאות" | "הכנסות")}
-                >
-                  <option value="הוצאות">הוצאות</option>
-                  <option value="הכנסות">הכנסות</option>
+                <label className="label">עמודת זכות / הכנסה (אם יש בקובץ)</label>
+                <select className="input" value={creditCol} onChange={(e) => setCreditCol(e.target.value)}>
+                  <option value="">אין - עמודה אחת של סכום</option>
+                  {headers.map((h) => (
+                    <option key={h} value={h}>
+                      {h}
+                    </option>
+                  ))}
                 </select>
               </div>
+              {!creditCol && (
+                <div>
+                  <label className="label">איך לזהות הוצאה והכנסה</label>
+                  <select className="input" value={mode} onChange={(e) => setMode(e.target.value as Mode)}>
+                    <option value="sign">לפי הסימן: שלילי = הוצאה, חיובי = הכנסה</option>
+                    <option value="הוצאות">הכל הוצאות</option>
+                    <option value="הכנסות">הכל הכנסות</option>
+                  </select>
+                  {mode === "sign" && (
+                    <label className="flex items-center gap-2 text-xs text-slate-500 mt-2">
+                      <input type="checkbox" checked={flipSign} onChange={(e) => setFlipSign(e.target.checked)} />
+                      הפוך: חיובי = הוצאה, שלילי = הכנסה
+                    </label>
+                  )}
+                </div>
+              )}
               <div>
                 <label className="label">תת-קטגוריה (אופציונלי)</label>
                 <input
@@ -307,8 +361,18 @@ export default function ImportPage() {
                 {invalidCount > 0 && (
                   <span className="text-amber-600"> ({invalidCount} שורות לא זוהו ודולגו)</span>
                 )}
-                . סה״כ: <span className="font-semibold text-slate-700">{totalAmount.toLocaleString("he-IL")} ₪</span>
+                .
               </p>
+              <div className="grid grid-cols-2 gap-2">
+                <div className="rounded-xl bg-red-50 px-3 py-2 text-sm">
+                  <p className="text-xs text-red-700">הוצאות · {expenseCount}</p>
+                  <p className="font-bold text-red-700">{expenseTotal.toLocaleString("he-IL")} ₪</p>
+                </div>
+                <div className="rounded-xl bg-emerald-50 px-3 py-2 text-sm">
+                  <p className="text-xs text-emerald-700">הכנסות · {incomeCount}</p>
+                  <p className="font-bold text-emerald-700">{incomeTotal.toLocaleString("he-IL")} ₪</p>
+                </div>
+              </div>
 
               {entries.length > 0 && (
                 <div className="overflow-x-auto">
@@ -317,6 +381,7 @@ export default function ImportPage() {
                       <tr className="border-b border-slate-200 text-slate-500">
                         <th className="py-1.5 px-2">תאריך</th>
                         <th className="py-1.5 px-2">שם</th>
+                        <th className="py-1.5 px-2">סוג</th>
                         <th className="py-1.5 px-2">סכום</th>
                       </tr>
                     </thead>
@@ -325,6 +390,7 @@ export default function ImportPage() {
                         <tr key={i} className="border-b border-slate-100">
                           <td className="py-1.5 px-2">{e.date}</td>
                           <td className="py-1.5 px-2">{e.title}</td>
+                          <td className={`py-1.5 px-2 ${e.kind === "הכנסות" ? "text-emerald-700" : "text-red-700"}`}>{e.kind === "הכנסות" ? "הכנסה" : "הוצאה"}</td>
                           <td className="py-1.5 px-2">{e.amount.toLocaleString("he-IL")} ₪</td>
                         </tr>
                       ))}
@@ -356,9 +422,14 @@ export default function ImportPage() {
                       נוצרו {result.created} רשומות חדשות
                       {result.skipped > 0 && ` (${result.skipped} דולגו - כבר קיימות)`}.
                     </p>
-                    <Link href={`/category/${encodeURIComponent(category)}`} className="underline font-medium">
-                      מעבר לעמוד {category}
-                    </Link>
+                    <div className="flex gap-4">
+                      <Link href="/category/%D7%94%D7%95%D7%A6%D7%90%D7%95%D7%AA" className="underline font-medium">
+                        מעבר להוצאות
+                      </Link>
+                      <Link href="/category/%D7%94%D7%9B%D7%A0%D7%A1%D7%95%D7%AA" className="underline font-medium">
+                        מעבר להכנסות
+                      </Link>
+                    </div>
                   </div>
                 </div>
               )}
