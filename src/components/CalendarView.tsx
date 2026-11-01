@@ -94,6 +94,7 @@ export function CalendarView() {
   const [newEventNotes, setNewEventNotes] = useState("");
   const [newEventColor, setNewEventColor] = useState(DEFAULT_EVENT_COLOR);
   const [newEventEnd, setNewEventEnd] = useState("");
+  const [newEventTime, setNewEventTime] = useState("");
 
   // עריכת אירוע קיים (נפתח inline בתוך הרשימה, ראו renderItemRow)
   const [editingEventId, setEditingEventId] = useState<string | null>(null);
@@ -295,12 +296,14 @@ export function CalendarView() {
         title: newEventTitle,
         date: selectedDay,
         endDate: newEventEnd && newEventEnd > selectedDay ? newEventEnd : undefined,
+        notifyTime: newEventTime || undefined,
         notes: newEventNotes,
         color: newEventColor,
       }),
     });
     if (res.ok) {
       setNewEventEnd("");
+      setNewEventTime("");
       setNewEventTitle("");
       setNewEventNotes("");
       setNewEventColor(DEFAULT_EVENT_COLOR);
@@ -611,6 +614,11 @@ export function CalendarView() {
                   onChange={(e) => setNewEventEnd(e.target.value)}
                 />
               </label>
+              <label className="block text-xs text-slate-500">
+                שעת התראה (אופציונלי, ריק = השעה הכללית)
+                <input type="time" className="input mt-1" value={newEventTime} onChange={(e) => setNewEventTime(e.target.value)} />
+              </label>
+              <p className="text-xs text-slate-400">תישלח התראה ביום שלפני האירוע וביום עצמו.</p>
               <ColorPicker value={newEventColor} onChange={setNewEventColor} />
               <button onClick={addEvent} className="btn-primary w-full flex items-center justify-center gap-2">
                 <Plus size={16} /> הוסף אירוע

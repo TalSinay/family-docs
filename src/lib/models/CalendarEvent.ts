@@ -11,6 +11,8 @@ export interface ICalendarEvent {
   date: string; // "YYYY-MM-DD" (יום התחלה)
   endDate?: string; // "YYYY-MM-DD" - יום סיום לאירוע רב-יומי (כולל); ריק = אירוע ליום אחד
   notes?: string;
+  notifyTime?: string; // "HH:MM" שעת ההתראה; ריק = השעה הגלובלית
+  lastNotifiedOn?: string; // "YYYY-MM-DD" - היום האחרון שנשלחה בו התראה על האירוע
   color?: string; // hex, ראו src/lib/itemColors.ts - ריק = הצבע הקבוע הישן (טיל)
   createdBy: mongoose.Types.ObjectId;
   createdAt: Date;
@@ -22,6 +24,8 @@ const CalendarEventSchema = new Schema<ICalendarEvent>({
   date: { type: String, required: true },
   endDate: { type: String },
   notes: { type: String },
+  notifyTime: { type: String },
+  lastNotifiedOn: { type: String },
   color: { type: String },
   createdBy: { type: Schema.Types.ObjectId, ref: "User", required: true },
   createdAt: { type: Date, default: Date.now },

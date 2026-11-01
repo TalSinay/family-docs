@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { connectToDatabase } from "@/lib/mongodb";
 import DocumentModel from "@/lib/models/Document";
+import CalendarEvent from "@/lib/models/CalendarEvent";
 import Task from "@/lib/models/Task";
 import MonthlyReminder from "@/lib/models/MonthlyReminder";
 import WorkspaceMembership from "@/lib/models/WorkspaceMembership";
@@ -60,7 +61,7 @@ export async function POST(req: NextRequest) {
   // כל פריט (משימה / תאריך יעד של מסמך / תזכורת חודשית) נשלח בפעם הראשונה שהשעה הנוכחית
   // הגיעה לשעה שנקבעה לו (notifyTime, או השעה הגלובלית אם לא נקבעה), ומסומן כ"נשלח היום"
   // באופן אטומי כדי שריצות חופפות לא ישלחו פעמיים. כל שליחה נרשמת ביומן ההתראות.
-  type Model = typeof Task | typeof DocumentModel | typeof MonthlyReminder;
+  type Model = typeof Task | typeof DocumentModel | typeof MonthlyReminder | typeof CalendarEvent;
   async function claim(model: Model, id: unknown, field: "lastNotifiedOn" | "lastSentOn") {
     const res = await (model as typeof Task).updateOne(
       { _id: id, [field]: { $ne: today } },
@@ -70,7 +71,7 @@ export async function POST(req: NextRequest) {
   }
   async function notify(
     workspaceId: string,
-    kind: "monthly" | "task" | "document",
+    kind: "monthly" | "task" | "document" | "event",
     payload: { title: string; body: string; url: string }
   ) {
     const members = membersByWorkspace.get(workspaceId) || [];
@@ -134,8 +135,28 @@ export async function POST(req: NextRequest) {
     monthlySent++;
   }
 
+  // 4. אירועי יומן שמתחילים היום או מחר (התראה ביום שלפני וביום עצמו; באירוע רב-יומי - לפי יום ההתחלה)
+  const tomorrow = addDays(today, 1);
+  const upcomingEvents = await CalendarEvent.find({
+    date: { $in: [today, tomorrow] },
+    lastNotifiedOn: { $ne: today },
+  }).lean();
+  let eventsSent = 0;
+  for (const ev of upcomingEvents) {
+    if (nowTime < (ev.notifyTime || globalTime)) continue;
+    if (!(await claim(CalendarEvent, ev._id, "lastNotifiedOn"))) continue;
+    const multi = ev.endDate && ev.endDate > ev.date;
+    await notify(ev.workspaceId.toString(), "event", {
+      title: ev.date === today ? (multi ? "אירוע מתחיל היום" : "אירוע היום") : "אירוע מחר",
+      body: ev.title,
+      url: "/calendar",
+    });
+    eventsSent++;
+  }
+
   return NextResponse.json({
     today,
+    calendarEvents: eventsSent,
     overdueTasks: tasksSent,
     approachingDocs: docsSent,
     nowTime,

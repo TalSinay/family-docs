@@ -1,13 +1,14 @@
 import { NextRequest, NextResponse } from "next/server";
 import { requireWorkspace } from "@/lib/requireWorkspace";
 import { connectToDatabase } from "@/lib/mongodb";
+import { isValidTime } from "@/lib/israelTime";
 import CalendarEvent from "@/lib/models/CalendarEvent";
 
 // רשימה סגורה של שדות שמותר לעדכן - קודם לכן הועבר כל ה-body ישירות ל-$set,
 // מה שהיה מאפשר (תיאורטית) לשלוח workspaceId בבקשה ול"להעביר" את האירוע
 // ל-workspace אחר (הסינון {_id, workspaceId} מגן רק על מציאת הרשומה, לא על
 // השדות שמעדכנים בה).
-const ALLOWED_FIELDS = ["title", "date", "notes", "color"];
+const ALLOWED_FIELDS = ["title", "date", "notes", "color", "notifyTime"];
 const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
 
 export async function PATCH(
@@ -29,6 +30,16 @@ export async function PATCH(
 
   // יום סיום: ריק/שווה להתחלה = אירוע ליום אחד (מוסרים את השדה)
   const unset: Record<string, 1> = {};
+  if ("notifyTime" in update) {
+    if (update.notifyTime === "" || update.notifyTime === null) {
+      delete update.notifyTime;
+      unset.notifyTime = 1;
+    } else if (!isValidTime(update.notifyTime)) {
+      return NextResponse.json({ error: "שעה לא תקינה (פורמט HH:MM)" }, { status: 400 });
+    }
+  }
+  // שינוי תאריך/שעה מתזמן מחדש את ההתראה
+  if ("date" in update || "notifyTime" in body) unset.lastNotifiedOn = 1;
   if ("endDate" in body || "date" in body) {
     let start = typeof body.date === "string" ? body.date : undefined;
     if (!start) {

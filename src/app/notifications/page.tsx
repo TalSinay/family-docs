@@ -8,6 +8,7 @@ import { useSession } from "next-auth/react";
 import {
   Bell,
   CalendarClock,
+  CalendarDays,
   CheckCircle2,
   ListChecks,
   FileText,
@@ -20,7 +21,7 @@ import {
 } from "lucide-react";
 import { formatDateTime } from "@/lib/format";
 
-type Kind = "monthly" | "task" | "document";
+type Kind = "monthly" | "task" | "document" | "event";
 
 type Scheduled = {
   kind: Kind;
@@ -43,7 +44,7 @@ type Data = {
   sent: Sent[];
 };
 
-const KIND_ICON = { monthly: Repeat, task: ListChecks, document: FileText } as const;
+const KIND_ICON = { monthly: Repeat, task: ListChecks, document: FileText, event: CalendarDays } as const;
 
 function addDaysStr(dateStr: string, days: number) {
   const [y, m, d] = dateStr.split("-").map(Number);
@@ -64,6 +65,7 @@ function formatDay(dateStr: string, today: string) {
 function endpoint(kind: Kind, id: string) {
   if (kind === "monthly") return `/api/monthly-reminders/${id}`;
   if (kind === "task") return `/api/tasks/${id}`;
+  if (kind === "event") return `/api/calendar-events/${id}`;
   return `/api/documents/${id}`;
 }
 
@@ -111,6 +113,8 @@ export default function NotificationsPage() {
       let payload: Record<string, unknown>;
       if (item.kind === "monthly") {
         payload = { title: editName.trim(), dayOfMonth: Number(editDate), time: editTime };
+      } else if (item.kind === "event") {
+        payload = { title: editName.trim(), notifyTime: editTime };
       } else if (item.kind === "task") {
         payload = { title: editName.trim(), dueDate: editDate, notifyTime: editTime };
       } else {
@@ -140,14 +144,16 @@ export default function NotificationsPage() {
     const msg =
       item.kind === "monthly"
         ? "למחוק את התזכורת החודשית?"
+        : item.kind === "event"
+        ? "למחוק את האירוע מהיומן? (גם ההתראה תימחק)"
         : item.kind === "task"
         ? "להסיר את ההתראה? תאריך היעד יוסר מהמשימה (המשימה עצמה תישאר)."
         : "להסיר את ההתראה? תאריך היעד יוסר מהמסמך (המסמך עצמו יישאר).";
     if (!confirm(msg)) return;
     setError("");
     let res: Response;
-    if (item.kind === "monthly") {
-      res = await fetch(endpoint("monthly", item.id), { method: "DELETE" });
+    if (item.kind === "monthly" || item.kind === "event") {
+      res = await fetch(endpoint(item.kind, item.id), { method: "DELETE" });
     } else {
       const clear =
         item.kind === "task"
@@ -297,6 +303,7 @@ export default function NotificationsPage() {
                         <input className="input" value={editName} onChange={(e) => setEditName(e.target.value)} />
                       </div>
                       <div className="flex gap-3">
+                        {item.kind !== "event" && (
                         <div className={item.kind === "monthly" ? "w-24" : "flex-1"}>
                           <label className="label">{item.kind === "monthly" ? "יום בחודש" : "תאריך"}</label>
                           {item.kind === "monthly" ? (
@@ -317,6 +324,7 @@ export default function NotificationsPage() {
                             />
                           )}
                         </div>
+                        )}
                         <div className="flex-1">
                           <label className="label">שעה</label>
                           <input

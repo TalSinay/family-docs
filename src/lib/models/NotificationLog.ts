@@ -4,7 +4,7 @@ import mongoose, { Schema, models, model } from "mongoose";
 export interface INotificationLog {
   _id: mongoose.Types.ObjectId;
   workspaceId: mongoose.Types.ObjectId;
-  kind: "monthly" | "task" | "document";
+  kind: "monthly" | "task" | "document" | "event";
   title: string; // כותרת ההתראה כפי שנשלחה (לדוגמה "משימה להיום")
   body: string; // תוכן ההתראה
   url?: string;
@@ -13,7 +13,7 @@ export interface INotificationLog {
 
 const NotificationLogSchema = new Schema<INotificationLog>({
   workspaceId: { type: Schema.Types.ObjectId, ref: "Workspace", required: true },
-  kind: { type: String, enum: ["monthly", "task", "document"], required: true },
+  kind: { type: String, enum: ["monthly", "task", "document", "event"], required: true },
   title: { type: String, required: true },
   body: { type: String, required: true },
   url: { type: String },

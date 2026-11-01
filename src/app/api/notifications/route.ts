@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { requireWorkspace } from "@/lib/requireWorkspace";
 import { connectToDatabase } from "@/lib/mongodb";
 import DocumentModel from "@/lib/models/Document";
+import CalendarEvent from "@/lib/models/CalendarEvent";
 import Task from "@/lib/models/Task";
 import MonthlyReminder from "@/lib/models/MonthlyReminder";
 import AppSettings from "@/lib/models/AppSettings";
@@ -26,7 +27,7 @@ function formatDay(dateStr: string): string {
 }
 
 export type ScheduledItem = {
-  kind: "monthly" | "task" | "document";
+  kind: "monthly" | "task" | "document" | "event";
   id: string;
   name: string; // השם הניתן לעריכה (כותרת תזכורת / משימה / כותרת תאריך יעד)
   label: string; // תיאור ההתראה, לדוגמה "תזכורת חודשית", "משימה באיחור"
@@ -50,7 +51,7 @@ export async function GET() {
   const globalTime = settings?.notificationTime || DEFAULT_NOTIFICATION_TIME;
   const [ty, tm, td] = today.split("-").map(Number);
 
-  const [reminders, tasks, docs, sent] = await Promise.all([
+  const [reminders, tasks, docs, events, sent] = await Promise.all([
     MonthlyReminder.find({ workspaceId }).lean(),
     Task.find({ workspaceId, isDone: false, dueDate: { $exists: true, $ne: null } }).lean(),
     DocumentModel.find({
@@ -58,6 +59,9 @@ export async function GET() {
       dueDate: { $gte: today, $lte: addDays(today, DOC_HORIZON_DAYS) },
     })
       .select("title dueDate dueDateTitle notifyTime lastNotifiedOn")
+      .lean(),
+    CalendarEvent.find({ workspaceId, date: { $gte: addDays(today, -1), $lte: addDays(today, DOC_HORIZON_DAYS) } })
+      .select("title date endDate notifyTime lastNotifiedOn")
       .lean(),
     NotificationLog.find({ workspaceId }).sort({ sentAt: -1 }).limit(SENT_LIMIT).lean(),
   ]);
@@ -140,6 +144,30 @@ export async function GET() {
       customTime: !!d.notifyTime,
       editDate: dueDate,
       editTime: d.notifyTime || "",
+    });
+  }
+
+  for (const e of events) {
+    const time = e.notifyTime || globalTime;
+    const dayBefore = addDays(e.date, -1);
+    let nextDate = e.date;
+    let label = `אירוע ביומן ב-${formatDay(e.date)}`;
+    if (dayBefore >= today && !(dayBefore === today && e.lastNotifiedOn === today)) {
+      nextDate = dayBefore;
+      label = `אירוע ביומן ב-${formatDay(e.date)} · התראה יום לפני`;
+    } else if (e.date < today || (e.date === today && e.lastNotifiedOn === today)) {
+      continue; // כבר נשלחה / עבר
+    }
+    items.push({
+      kind: "event",
+      id: String(e._id),
+      name: e.title,
+      label,
+      nextDate,
+      time,
+      customTime: !!e.notifyTime,
+      editDate: e.date,
+      editTime: e.notifyTime || "",
     });
   }
 

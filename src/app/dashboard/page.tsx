@@ -11,7 +11,7 @@ import { Modal } from "@/components/Modal";
 import { formatCurrency, formatDate, HEBREW_MONTHS } from "@/lib/format";
 
 type AttentionItem = {
-  kind: "monthly" | "task" | "document";
+  kind: "monthly" | "task" | "document" | "event";
   id: string;
   name: string;
   label: string;
@@ -36,6 +36,7 @@ function attentionWhen(diff: number, time: string): string {
 
 function attentionHref(item: AttentionItem): string {
   if (item.kind === "task") return "/tasks";
+  if (item.kind === "event") return "/calendar";
   if (item.kind === "document") return `/documents/${item.id}`;
   return "/notifications";
 }
