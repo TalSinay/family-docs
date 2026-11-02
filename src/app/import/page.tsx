@@ -265,9 +265,9 @@ export default function ImportPage() {
           entries: entries.map((e) => ({ title: e.title, amount: e.amount, date: e.date, category: e.kind })),
         }),
       });
-      const data = await res.json();
+      const data = await res.json().catch(() => ({}));
       if (!res.ok) {
-        setSubmitError(data.error || "שגיאה בייבוא");
+        setSubmitError(data.error || `שגיאה בייבוא (${res.status})`);
         return;
       }
       setResult(data);

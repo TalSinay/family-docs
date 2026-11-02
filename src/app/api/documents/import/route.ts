@@ -17,6 +17,17 @@ const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
 // מבוסס על קובץ שהמשתמש מעלה ומפרסר בדפדפן שלו (ראה src/app/import/page.tsx) - כאן
 // רק מתבצע ולידציה, דה-דופליקציה מול מה שכבר קיים ב-workspace, ויצירה בפועל.
 export async function POST(req: NextRequest) {
+  try {
+    return await handlePost(req);
+  } catch (e) {
+    // שגיאה לא צפויה: מחזירים הודעה קריאה (במקום 500 ריק) ורושמים ללוג של השרת
+    console.error("import failed", e);
+    const detail = e instanceof Error ? e.message : String(e);
+    return NextResponse.json({ error: `הייבוא נכשל בשרת: ${detail.slice(0, 300)}` }, { status: 500 });
+  }
+}
+
+async function handlePost(req: NextRequest) {
   const { session, workspaceId, error } = await requireWorkspace();
   if (error) return error;
 
@@ -116,7 +127,10 @@ export async function POST(req: NextRequest) {
   }
 
   if (toCreate.length > 0) {
-    await DocumentModel.insertMany(toCreate);
+    // בחבילות, כדי לא להעמיס על פעולה אחת
+    for (let i = 0; i < toCreate.length; i += 500) {
+      await DocumentModel.insertMany(toCreate.slice(i, i + 500));
+    }
   }
 
   return NextResponse.json({
