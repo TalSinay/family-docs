@@ -9,6 +9,8 @@ import Workspace from "@/lib/models/Workspace";
 import { DocumentCard } from "@/components/DocumentCard";
 import { EmptyState } from "@/components/EmptyState";
 import { computeBankEffective } from "@/lib/bank";
+import { isLoanDoc, loanStats } from "@/lib/loans";
+import { israelNow } from "@/lib/israelTime";
 import { MonthlyFlowChart } from "@/components/MonthlyFlowChart";
 import { FinanceOverview, FinanceDoc } from "@/components/FinanceOverview";
 import { DEFAULT_SUBCATEGORIES, MAIN_CATEGORIES, MainCategory } from "@/lib/categories";
@@ -61,6 +63,22 @@ export default async function CategoryPage({
       financeDocs[i].bankBaseAmount = d.amount ?? 0;
       financeDocs[i].bankDelta = delta;
       financeDocs[i].amount = effective;
+    }
+  }
+
+  // הלוואות: היתרה המשוערת (לפי תשלומים שנותרו) נקבעת בשרת לפי שעון ישראל, ומחליפה את הסכום המוצג
+  if (category === "פיננסים") {
+    const today = israelNow().date;
+    for (let i = 0; i < docs.length; i++) {
+      const d = docs[i];
+      if (!isLoanDoc(d)) continue;
+      const st = loanStats(d, today);
+      financeDocs[i].loanOriginal = d.amount ?? undefined;
+      if (!st) continue;
+      financeDocs[i].amount = st.remainingBalance;
+      financeDocs[i].loanTotalPayments = st.totalPayments;
+      financeDocs[i].loanRemainingPayments = st.remainingPayments;
+      financeDocs[i].loanMonthsLeft = st.monthsLeft;
     }
   }
 

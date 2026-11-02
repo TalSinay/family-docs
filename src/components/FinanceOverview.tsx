@@ -2,8 +2,11 @@
 
 import { useState } from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { Pie, PieChart, Cell, ResponsiveContainer, Tooltip } from "recharts";
-import { Pencil, Check, X, ExternalLink, TrendingUp, TrendingDown, Landmark } from "lucide-react";
+import { Pencil, Check, X, ExternalLink, TrendingUp, TrendingDown, Landmark, Plus } from "lucide-react";
+import { Modal } from "./Modal";
+import { LoansSection, LoanForm } from "./LoansSection";
 import { formatCurrency, formatDate } from "@/lib/format";
 
 export type FinanceDoc = {
@@ -16,6 +19,13 @@ export type FinanceDoc = {
   commissionFee?: number;
   targetAmount?: number;
   isLiability?: boolean;
+  loanStartDate?: string;
+  loanEndDate?: string;
+  loanMonthlyPayment?: number;
+  loanOriginal?: number; // סכום מקורי (amount מוחלף ביתרה משוערת)
+  loanTotalPayments?: number;
+  loanRemainingPayments?: number;
+  loanMonthsLeft?: number;
   isBank?: boolean;
   bankAutoSync?: boolean;
   bankBaseAmount?: number; // היתרה שהוזנה (בסיס) - רק לרשומת הבנק
@@ -28,7 +38,7 @@ export type FinanceDoc = {
 const COLORS = ["#4f46e5", "#0ea5e9", "#f59e0b", "#8b5cf6", "#ec4899", "#22c55e", "#ef4444", "#64748b", "#14b8a6", "#f97316"];
 
 type GroupBy = "record" | "type";
-type Slice = { name: string; value: number };
+export type Slice = { name: string; value: number };
 
 // סוגים שמוצגים בעוגה נפרדת (חיסכון פנסיוני) ולא בעוגה העליונה
 const PENSION_TYPES = ["קרן השתלמות", "קרן פנסיה"];
@@ -52,6 +62,8 @@ export function FinanceOverview({ initialDocs, sub }: { initialDocs: FinanceDoc[
   const [editValue, setEditValue] = useState("");
   const [savingId, setSavingId] = useState<string | null>(null);
   const [error, setError] = useState("");
+  const [loanOpen, setLoanOpen] = useState(false);
+  const router = useRouter();
 
   const withAmount = docs.filter((d) => typeof d.amount === "number");
   // קרן השתלמות/פנסיה לא נכללות בסה"כ - הן מוצגות בעוגה נפרדת עם סכום משלהן
@@ -91,6 +103,7 @@ export function FinanceOverview({ initialDocs, sub }: { initialDocs: FinanceDoc[
     .sort((a, b) => b.value - a.value);
 
   const bankDoc = docs.find((d) => d.isBank);
+  const loans = docs.filter((d) => d.subcategory === "הלוואה" && !d.isBank);
 
   // רשומת הבנק מוצגת בכרטיס ייעודי למעלה, ולא בתוך הרשימה
   const listDocs = docs.filter((d) => !d.isBank);
@@ -185,6 +198,24 @@ export function FinanceOverview({ initialDocs, sub }: { initialDocs: FinanceDoc[
         />
       )}
 
+      <LoansSection loans={loans} />
+
+      <button
+        type="button"
+        onClick={() => setLoanOpen(true)}
+        className="btn-secondary w-full flex items-center justify-center gap-2"
+      >
+        <Plus size={16} /> הוספת הלוואה
+      </button>
+      <Modal open={loanOpen} onClose={() => setLoanOpen(false)} title="הוספת הלוואה">
+        <LoanForm
+          onDone={() => {
+            setLoanOpen(false);
+            router.refresh();
+          }}
+        />
+      </Modal>
+
       {error && <p className="text-sm text-red-600">{error}</p>}
 
       <div className="space-y-2">
@@ -272,6 +303,13 @@ export function FinanceOverview({ initialDocs, sub }: { initialDocs: FinanceDoc[
                         {formatCurrency(Math.abs(change))}
                       </span>
                     )}
+                    {d.subcategory === "הלוואה" && d.loanMonthlyPayment != null && (
+                      <span className="text-xs text-slate-500">
+                        {formatCurrency(d.loanMonthlyPayment)} לחודש
+                        {d.loanRemainingPayments != null && ` · נשארו ${d.loanRemainingPayments} תשלומים`}
+                      </span>
+                    )}
+                    {d.subcategory !== "הלוואה" && (
                     <button
                       type="button"
                       onClick={() => startEdit(d)}
@@ -281,6 +319,7 @@ export function FinanceOverview({ initialDocs, sub }: { initialDocs: FinanceDoc[
                     >
                       <Pencil size={16} />
                     </button>
+                    )}
                   </>
                 )}
               </div>
@@ -309,7 +348,7 @@ export function FinanceOverview({ initialDocs, sub }: { initialDocs: FinanceDoc[
   );
 }
 
-function PieCard({ slices, header }: { slices: Slice[]; header: React.ReactNode }) {
+export function PieCard({ slices, header }: { slices: Slice[]; header: React.ReactNode }) {
   const total = slices.reduce((s, x) => s + x.value, 0);
   return (
     <div className="card p-4">

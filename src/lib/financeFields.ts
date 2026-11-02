@@ -21,6 +21,16 @@ export function sanitizeFinanceFields(body: Record<string, unknown>): Record<str
       if (n !== undefined) out[key] = n;
     }
   }
+  for (const key of ["loanStartDate", "loanEndDate"] as const) {
+    if (key in body) {
+      const v = body[key];
+      out[key] = typeof v === "string" && /^\d{4}-\d{2}-\d{2}$/.test(v) ? v : null;
+    }
+  }
+  if ("loanMonthlyPayment" in body) {
+    const n = numOrNull(body.loanMonthlyPayment);
+    if (n !== undefined) out.loanMonthlyPayment = n;
+  }
   if ("isLiability" in body) out.isLiability = body.isLiability === true;
 
   return out;

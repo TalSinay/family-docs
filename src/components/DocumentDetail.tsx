@@ -48,6 +48,9 @@ type DocData = {
   commissionFee?: number;
   targetAmount?: number;
   isLiability?: boolean;
+  loanStartDate?: string;
+  loanEndDate?: string;
+  loanMonthlyPayment?: number;
   isBank?: boolean;
   amountHistory?: { amount: number; at: string }[];
   dueDate?: string;
@@ -90,6 +93,9 @@ export function DocumentDetail({ doc: initialDoc }: { doc: DocData }) {
     commissionFee: initialDoc.commissionFee != null ? String(initialDoc.commissionFee) : "",
     targetAmount: initialDoc.targetAmount != null ? String(initialDoc.targetAmount) : "",
     isLiability: !!initialDoc.isLiability,
+    loanStartDate: initialDoc.loanStartDate || "",
+    loanEndDate: initialDoc.loanEndDate || "",
+    loanMonthlyPayment: initialDoc.loanMonthlyPayment != null ? String(initialDoc.loanMonthlyPayment) : "",
   });
   const [dueDate, setDueDate] = useState(initialDoc.dueDate || "");
   const [dueDateTitle, setDueDateTitle] = useState(initialDoc.dueDateTitle || "");
@@ -452,7 +458,7 @@ export function DocumentDetail({ doc: initialDoc }: { doc: DocData }) {
             />
           </div>
           )}
-          <FinanceFieldsInputs values={finance} onChange={setFinance} />
+          <FinanceFieldsInputs values={finance} onChange={setFinance} showLoan={subInput === "הלוואה"} />
           {(doc.amountHistory?.length ?? 0) > 1 && (
             <div>
               <p className="label">היסטוריית עדכוני סכום</p>

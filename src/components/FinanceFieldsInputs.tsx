@@ -9,6 +9,9 @@ export type FinanceFormValues = {
   commissionFee: string;
   targetAmount: string;
   isLiability: boolean;
+  loanStartDate: string;
+  loanEndDate: string;
+  loanMonthlyPayment: string;
 };
 
 export const EMPTY_FINANCE_VALUES: FinanceFormValues = {
@@ -17,6 +20,9 @@ export const EMPTY_FINANCE_VALUES: FinanceFormValues = {
   commissionFee: "",
   targetAmount: "",
   isLiability: false,
+  loanStartDate: "",
+  loanEndDate: "",
+  loanMonthlyPayment: "",
 };
 
 export function financeValuesToPayload(v: FinanceFormValues) {
@@ -27,15 +33,20 @@ export function financeValuesToPayload(v: FinanceFormValues) {
     commissionFee: num(v.commissionFee),
     targetAmount: num(v.targetAmount),
     isLiability: v.isLiability,
+    loanStartDate: v.loanStartDate || null,
+    loanEndDate: v.loanEndDate || null,
+    loanMonthlyPayment: num(v.loanMonthlyPayment),
   };
 }
 
 export function FinanceFieldsInputs({
   values,
   onChange,
+  showLoan = false,
 }: {
   values: FinanceFormValues;
   onChange: (next: FinanceFormValues) => void;
+  showLoan?: boolean;
 }) {
   const set = <K extends keyof FinanceFormValues>(key: K, val: FinanceFormValues[K]) =>
     onChange({ ...values, [key]: val });
@@ -86,6 +97,25 @@ export function FinanceFieldsInputs({
           onChange={(e) => set("targetAmount", e.target.value)}
         />
       </div>
+      {showLoan && (
+        <div className="rounded-xl bg-slate-50 p-3 space-y-3">
+          <p className="text-sm font-semibold">פרטי ההלוואה (הסכום למעלה = סכום ההלוואה המקורי)</p>
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label className="label">תאריך ירידה ראשונה</label>
+              <input type="date" className="input" value={values.loanStartDate} onChange={(e) => set("loanStartDate", e.target.value)} />
+            </div>
+            <div>
+              <label className="label">תאריך סיום</label>
+              <input type="date" className="input" min={values.loanStartDate} value={values.loanEndDate} onChange={(e) => set("loanEndDate", e.target.value)} />
+            </div>
+          </div>
+          <div>
+            <label className="label">סכום שיורד כל חודש (₪)</label>
+            <input type="number" step="0.01" inputMode="decimal" className="input" value={values.loanMonthlyPayment} onChange={(e) => set("loanMonthlyPayment", e.target.value)} />
+          </div>
+        </div>
+      )}
       <label className="flex items-center gap-2 text-sm font-medium text-slate-600">
         <input
           type="checkbox"

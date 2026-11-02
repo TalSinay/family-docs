@@ -49,6 +49,10 @@ export interface IDocument {
   commissionFee?: number; // עמלה באחוזים
   targetAmount?: number; // סכום יעד (להצגת התקדמות)
   isLiability?: boolean;
+  // הלוואה (פיננסים, תת-קטגוריה "הלוואה"): amount = סכום מקורי; ירידה חודשית באותו יום כמו loanStartDate עד loanEndDate (כולל)
+  loanStartDate?: string; // YYYY-MM-DD
+  loanEndDate?: string; // YYYY-MM-DD
+  loanMonthlyPayment?: number;
   // רשומת הבנק הקבועה (אחת ל-workspace): amount = היתרה לתחילת bankBaseMonth; כש-bankAutoSync
   // פעיל, היתרה המוצגת = amount + מאזן הכנסות-הוצאות מאז bankBaseMonth ועד החודש הנוכחי.
   isBank?: boolean;
@@ -118,6 +122,9 @@ const DocumentSchema = new Schema<IDocument>({
   commissionFee: { type: Number },
   targetAmount: { type: Number },
   isLiability: { type: Boolean, default: false },
+  loanStartDate: { type: String },
+  loanEndDate: { type: String },
+  loanMonthlyPayment: { type: Number },
   isBank: { type: Boolean, default: false },
   bankAutoSync: { type: Boolean, default: false },
   bankBaseMonth: { type: String },

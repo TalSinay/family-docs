@@ -268,7 +268,7 @@ export function UploadForm({
         </div>
       )}
 
-      {isFinanceCategory && <FinanceFieldsInputs values={finance} onChange={setFinance} />}
+      {isFinanceCategory && <FinanceFieldsInputs values={finance} onChange={setFinance} showLoan={(newSubcategory.trim() || subcategory) === "הלוואה"} />}
 
       <div>
         <label className="label">קישור לפלטפורמה</label>
