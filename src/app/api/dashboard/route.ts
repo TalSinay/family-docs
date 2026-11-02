@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { requireWorkspace } from "@/lib/requireWorkspace";
 import { connectToDatabase } from "@/lib/mongodb";
+import { effectiveMonthKey, SHIFT_LOOKBACK_DAYS } from "@/lib/effectiveMonth";
 import DocumentModel from "@/lib/models/Document";
 import { overlayUploaderDisplayNames } from "@/lib/resolveDisplayNames";
 
@@ -32,7 +33,8 @@ export async function GET(req: NextRequest) {
     DocumentModel.find({
       workspaceId,
       category: { $in: ["הוצאות", "הכנסות"] },
-      uploadedAt: { $gte: monthStart, $lt: monthEnd },
+      // מרחיבים אחורה כדי לתפוס הכנסות מסוף החודש הקודם (נספרות לחודש הזה), ומסננים לפי החודש האפקטיבי
+      uploadedAt: { $gte: new Date(year, month, 1 - SHIFT_LOOKBACK_DAYS), $lt: new Date(year, month + 1, 1) },
     })
       .select("title category subcategory amount uploadedAt")
       .sort({ uploadedAt: 1 })
@@ -65,6 +67,7 @@ export async function GET(req: NextRequest) {
     subcategory?: string;
     amount: number;
     date: string; // ISO
+    shifted?: boolean; // הכנסה מסוף החודש הקודם שנספרת לחודש הזה
     projected: boolean; // תשלום חודשי קבוע שטרם הופקה עבורו רשומה
   };
   const expenseItems: FlowItem[] = [];
@@ -73,6 +76,8 @@ export async function GET(req: NextRequest) {
 
   for (const d of flowDocs) {
     if (typeof d.amount !== "number") continue;
+    const when = new Date(d.uploadedAt);
+    if (effectiveMonthKey(d.category, when) !== monthKey) continue;
     const item: FlowItem = {
       id: String(d._id),
       title: d.title,
@@ -80,6 +85,7 @@ export async function GET(req: NextRequest) {
       amount: d.amount,
       date: new Date(d.uploadedAt).toISOString(),
       projected: false,
+      shifted: when.getMonth() !== month,
     };
     (d.category === "הוצאות" ? expenseItems : incomeItems).push(item);
   }
@@ -95,6 +101,7 @@ export async function GET(req: NextRequest) {
       amount: source.monthlyAmount,
       date: new Date(year, month, day, 12).toISOString(),
       projected: true,
+      shifted: false,
     };
     (source.category === "הוצאות" ? expenseItems : incomeItems).push(item);
     projectedCount++;

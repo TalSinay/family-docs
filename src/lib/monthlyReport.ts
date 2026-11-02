@@ -1,6 +1,7 @@
 import { connectToDatabase } from "@/lib/mongodb";
 import DocumentModel from "@/lib/models/Document";
 import type { Types } from "mongoose";
+import { effectiveMonthKey, SHIFT_LOOKBACK_DAYS } from "@/lib/effectiveMonth";
 
 export function monthKey(y: number, m: number) {
   // m: 0-based (כמו getMonth())
@@ -18,14 +19,15 @@ export async function computeMonthlyReport(
 ) {
   await connectToDatabase();
 
-  const rangeStart = new Date(fy, fm, 1);
+  // הכנסות מסוף החודש שלפני הטווח נספרות לחודש הראשון בטווח (ראו effectiveMonth.ts)
+  const queryStart = new Date(fy, fm, 1 - SHIFT_LOOKBACK_DAYS);
   const rangeEnd = new Date(ty, tm + 1, 1);
 
   const [docs, recurringSources] = await Promise.all([
     DocumentModel.find({
       workspaceId,
       category: { $in: ["הוצאות", "הכנסות"] },
-      uploadedAt: { $gte: rangeStart, $lt: rangeEnd },
+      uploadedAt: { $gte: queryStart, $lt: rangeEnd },
     })
       .select("category amount uploadedAt")
       .lean(),
@@ -60,7 +62,7 @@ export async function computeMonthlyReport(
   for (const doc of docs) {
     if (typeof doc.amount !== "number") continue;
     const d = new Date(doc.uploadedAt);
-    const bucket = buckets.get(monthKey(d.getFullYear(), d.getMonth()));
+    const bucket = buckets.get(effectiveMonthKey(doc.category, d));
     if (!bucket) continue;
     if (doc.category === "הכנסות") bucket.income += doc.amount;
     else if (doc.category === "הוצאות") bucket.expenses += doc.amount;

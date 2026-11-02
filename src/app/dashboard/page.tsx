@@ -48,6 +48,7 @@ type FlowItem = {
   amount: number;
   date: string;
   projected: boolean;
+  shifted?: boolean;
 };
 
 type DashboardData = {
@@ -333,6 +334,9 @@ function FlowList({ items, onNavigate }: { items: FlowItem[]; onNavigate: () => 
             <p className="text-xs text-slate-500 mt-0.5 flex items-center gap-1.5 flex-wrap">
               <span>{formatDate(item.date)}</span>
               {item.subcategory && <span>· {item.subcategory}</span>}
+              {item.shifted && (
+                <span className="rounded-full bg-sky-100 text-sky-800 px-2 py-0.5 font-medium">מסוף החודש הקודם</span>
+              )}
               {item.projected && (
                 <span className="rounded-full bg-amber-100 text-amber-800 px-2 py-0.5 font-medium">צפוי · קבוע חודשי</span>
               )}
