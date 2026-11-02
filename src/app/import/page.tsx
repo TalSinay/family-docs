@@ -1,12 +1,23 @@
 "use client";
 
-import { useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import Papa from "papaparse";
 import { readSheet } from "read-excel-file/browser";
-import { ArrowRight, Upload, CheckCircle2 } from "lucide-react";
+import { ArrowRight, Upload, CheckCircle2, Trash2 } from "lucide-react";
 
 type Row = Record<string, string>;
+type ImportBatch = {
+  key: string;
+  fileName: string;
+  importedAt: string;
+  count: number;
+  expenses: { count: number; total: number };
+  income: { count: number; total: number };
+  from: string;
+  to: string;
+};
+
 type Kind = "הוצאות" | "הכנסות";
 type ParsedEntry = { title: string; amount: number; date: string; rawIndex: number; kind: Kind };
 type FileType = "card" | "bank"; // כרטיס אשראי: הכל הוצאות. בנק: הוצאות והכנסות
@@ -82,6 +93,37 @@ export default function ImportPage() {
     null
   );
   const [submitError, setSubmitError] = useState("");
+  const [batches, setBatches] = useState<ImportBatch[] | null>(null);
+  const [deletingKey, setDeletingKey] = useState("");
+
+  const loadBatches = useCallback(async () => {
+    try {
+      const res = await fetch("/api/documents/import");
+      if (res.ok) setBatches(await res.json());
+    } catch {
+      /* לא קריטי */
+    }
+  }, []);
+
+  useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- טעינת רשימת הייבואים בעליית העמוד
+    loadBatches();
+  }, [loadBatches]);
+
+  async function deleteBatch(b: ImportBatch) {
+    const name = b.fileName || "הייבוא הזה";
+    if (!confirm(`למחוק את ${name}? יימחקו ${b.count} רשומות (הוצאות/הכנסות) שנוצרו ממנו. אי אפשר לשחזר.`)) return;
+    setDeletingKey(b.key);
+    try {
+      const res = await fetch(`/api/documents/import?batch=${encodeURIComponent(b.key)}`, { method: "DELETE" });
+      if (!res.ok) throw new Error();
+      await loadBatches();
+    } catch {
+      setSubmitError("מחיקת הייבוא נכשלה");
+    } finally {
+      setDeletingKey("");
+    }
+  }
 
   // המרת תא גולמי שמוחזר מ-read-excel-file (מספר / Date / מחרוזת / null) למחרוזת אחידה,
   // כדי שהמשך העיבוד (guessColumn, parseDate, parseAmount) יוכל להתייחס לכל השורות
@@ -218,6 +260,7 @@ export default function ImportPage() {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
+          fileName: fileName || undefined,
           subcategory: subcategory.trim() || undefined,
           entries: entries.map((e) => ({ title: e.title, amount: e.amount, date: e.date, category: e.kind })),
         }),
@@ -228,6 +271,7 @@ export default function ImportPage() {
         return;
       }
       setResult(data);
+      loadBatches();
     } finally {
       setSubmitting(false);
     }
@@ -246,6 +290,37 @@ export default function ImportPage() {
           Excel (.xlsx), והעלה אותו כאן ישירות - אין צורך בהמרה בין הפורמטים.
         </p>
       </div>
+
+      <section className="card p-5 space-y-3">
+        <h2 className="font-bold text-lg">קבצים שיובאו</h2>
+        <p className="text-xs text-slate-500">מחיקה מסירה את כל ההוצאות וההכנסות שנוצרו מאותו קובץ, למקרה של טעות.</p>
+        {batches === null && <p className="text-sm text-slate-400">טוען...</p>}
+        {batches && batches.length === 0 && <p className="text-sm text-slate-400">עוד לא יובאו קבצים.</p>}
+        {batches?.map((b) => (
+          <div key={b.key} className="rounded-xl border border-slate-200 p-3 flex items-start gap-3">
+            <div className="flex-1 min-w-0">
+              <p className="font-medium truncate">{b.fileName || "ייבוא"}</p>
+              <p className="text-xs text-slate-500">
+                יובא {new Date(b.importedAt).toLocaleDateString("he-IL")} · {b.count} רשומות · תנועות מ-{b.from.split("-").reverse().join(".")} עד {b.to.split("-").reverse().join(".")}
+              </p>
+              <p className="text-xs mt-1">
+                {b.expenses.count > 0 && <span className="text-red-700">הוצאות {b.expenses.count} · {b.expenses.total.toLocaleString("he-IL")} ₪</span>}
+                {b.expenses.count > 0 && b.income.count > 0 && " · "}
+                {b.income.count > 0 && <span className="text-emerald-700">הכנסות {b.income.count} · {b.income.total.toLocaleString("he-IL")} ₪</span>}
+              </p>
+            </div>
+            <button
+              type="button"
+              disabled={deletingKey === b.key}
+              onClick={() => deleteBatch(b)}
+              className="p-2 rounded-full text-slate-400 hover:bg-slate-100 hover:text-red-600 disabled:opacity-50"
+              aria-label="מחיקת הייבוא"
+            >
+              <Trash2 size={18} />
+            </button>
+          </div>
+        ))}
+      </section>
 
       <section className="card p-5 space-y-4">
         <div>

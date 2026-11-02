@@ -53,6 +53,8 @@ export interface IDocument {
   loanStartDate?: string; // YYYY-MM-DD
   loanEndDate?: string; // YYYY-MM-DD
   loanMonthlyPayment?: number;
+  importBatchId?: string; // מזהה ייבוא מקובץ (src/app/import), כדי שאפשר יהיה למחוק ייבוא שלם
+  importFileName?: string;
   // רשומת הבנק הקבועה (אחת ל-workspace): amount = היתרה לתחילת bankBaseMonth; כש-bankAutoSync
   // פעיל, היתרה המוצגת = amount + מאזן הכנסות-הוצאות מאז bankBaseMonth ועד החודש הנוכחי.
   isBank?: boolean;
@@ -125,6 +127,8 @@ const DocumentSchema = new Schema<IDocument>({
   loanStartDate: { type: String },
   loanEndDate: { type: String },
   loanMonthlyPayment: { type: Number },
+  importBatchId: { type: String },
+  importFileName: { type: String },
   isBank: { type: Boolean, default: false },
   bankAutoSync: { type: Boolean, default: false },
   bankBaseMonth: { type: String },

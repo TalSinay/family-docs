@@ -4,6 +4,9 @@ import { connectToDatabase } from "@/lib/mongodb";
 import DocumentModel from "@/lib/models/Document";
 import SubCategory from "@/lib/models/SubCategory";
 import { MainCategory } from "@/lib/categories";
+import mongoose from "mongoose";
+
+const IMPORT_NOTE = "יובא אוטומטית מקובץ תנועות (Max)";
 
 type ImportEntry = { title: string; amount: number; date: string; category: MainCategory };
 
@@ -18,7 +21,8 @@ export async function POST(req: NextRequest) {
   if (error) return error;
 
   const body = await req.json();
-  const { entries, subcategory, category } = body as {
+  const { entries, subcategory, category, fileName } = body as {
+    fileName?: string;
     entries?: unknown;
     subcategory?: string;
     category?: MainCategory;
@@ -84,6 +88,7 @@ export async function POST(req: NextRequest) {
     existing.map((d) => signature(d.category, d.title, d.amount ?? 0, d.uploadedAt as Date))
   );
 
+  const batchId = new mongoose.Types.ObjectId().toString();
   const toCreate: Record<string, unknown>[] = [];
   let skipped = 0;
   for (const entry of valid) {
@@ -99,7 +104,9 @@ export async function POST(req: NextRequest) {
       title: entry.title,
       category: entry.category,
       subcategory: subcategory || undefined,
-      notes: "יובא אוטומטית מקובץ תנועות (Max)",
+      notes: IMPORT_NOTE,
+      importBatchId: batchId,
+      importFileName: typeof fileName === "string" ? fileName.slice(0, 200) : undefined,
       amount: entry.amount,
       isMonthlyPayment: false,
       uploadedBy: session!.user.id,
@@ -113,6 +120,7 @@ export async function POST(req: NextRequest) {
   }
 
   return NextResponse.json({
+    batchId,
     created: toCreate.length,
     createdIncome: toCreate.filter((d) => d.category === "הכנסות").length,
     createdExpenses: toCreate.filter((d) => d.category === "הוצאות").length,
@@ -133,4 +141,89 @@ function signature(category: string, title: string, amount: number, date: Date):
     date.getDate()
   ).padStart(2, "0")}`;
   return `${category}|${day}|${Math.round(amount * 100)}|${title.trim().toLowerCase()}`;
+}
+
+// ---- ייבואים קודמים: רשימה ומחיקה של ייבוא שלם ----
+// ייבוא חדש מזוהה לפי importBatchId. ייבואים ישנים (לפני שהמזהה נוסף) מזוהים לפי ההערה
+// הקבועה ולפי דקת היצירה (חותמת הזמן שב-_id), ומקבלים מפתח "legacy-<שניות>".
+
+type BatchRow = {
+  key: string;
+  fileName: string;
+  importedAt: string;
+  count: number;
+  expenses: { count: number; total: number };
+  income: { count: number; total: number };
+  from: string;
+  to: string;
+};
+
+export async function GET() {
+  const { workspaceId, error } = await requireWorkspace();
+  if (error) return error;
+  await connectToDatabase();
+
+  const docs = await DocumentModel.find({
+    workspaceId,
+    $or: [{ importBatchId: { $exists: true, $ne: null } }, { notes: IMPORT_NOTE }],
+  })
+    .select("category amount uploadedAt importBatchId importFileName")
+    .lean();
+
+  const batches = new Map<string, BatchRow>();
+  for (const d of docs) {
+    const created = (d._id as mongoose.Types.ObjectId).getTimestamp();
+    const key = d.importBatchId || `legacy-${Math.floor(created.getTime() / 60000) * 60}`;
+    let b = batches.get(key);
+    const day = new Date(d.uploadedAt).toISOString().slice(0, 10);
+    if (!b) {
+      b = {
+        key,
+        fileName: d.importFileName || (d.importBatchId ? "" : "ייבוא קודם (ללא שם קובץ)"),
+        importedAt: created.toISOString(),
+        count: 0,
+        expenses: { count: 0, total: 0 },
+        income: { count: 0, total: 0 },
+        from: day,
+        to: day,
+      };
+      batches.set(key, b);
+    }
+    b.count++;
+    const side = d.category === "הכנסות" ? b.income : b.expenses;
+    side.count++;
+    side.total += d.amount ?? 0;
+    if (day < b.from) b.from = day;
+    if (day > b.to) b.to = day;
+    if (created.toISOString() < b.importedAt) b.importedAt = created.toISOString();
+  }
+
+  const list = [...batches.values()].sort((a, b) => b.importedAt.localeCompare(a.importedAt));
+  return NextResponse.json(list);
+}
+
+export async function DELETE(req: NextRequest) {
+  const { workspaceId, error } = await requireWorkspace();
+  if (error) return error;
+  const key = new URL(req.url).searchParams.get("batch") || "";
+  await connectToDatabase();
+
+  if (/^legacy-\d+$/.test(key)) {
+    const start = Number(key.slice(7));
+    const res = await DocumentModel.deleteMany({
+      workspaceId,
+      notes: IMPORT_NOTE,
+      importBatchId: { $exists: false },
+      _id: {
+        $gte: mongoose.Types.ObjectId.createFromTime(start),
+        $lt: mongoose.Types.ObjectId.createFromTime(start + 60),
+      },
+    });
+    return NextResponse.json({ deleted: res.deletedCount });
+  }
+  if (!/^[a-f0-9]{24}$/.test(key)) {
+    return NextResponse.json({ error: "מזהה ייבוא לא תקין" }, { status: 400 });
+  }
+  const res = await DocumentModel.deleteMany({ workspaceId, importBatchId: key });
+  return NextResponse.json({ deleted: res.deletedCount });
 }
