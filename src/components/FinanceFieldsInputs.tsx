@@ -12,6 +12,7 @@ export type FinanceFormValues = {
   loanStartDate: string;
   loanEndDate: string;
   loanMonthlyPayment: string;
+  loanInterestRate: string;
 };
 
 export const EMPTY_FINANCE_VALUES: FinanceFormValues = {
@@ -23,6 +24,7 @@ export const EMPTY_FINANCE_VALUES: FinanceFormValues = {
   loanStartDate: "",
   loanEndDate: "",
   loanMonthlyPayment: "",
+  loanInterestRate: "",
 };
 
 export function financeValuesToPayload(v: FinanceFormValues) {
@@ -36,6 +38,7 @@ export function financeValuesToPayload(v: FinanceFormValues) {
     loanStartDate: v.loanStartDate || null,
     loanEndDate: v.loanEndDate || null,
     loanMonthlyPayment: num(v.loanMonthlyPayment),
+    loanInterestRate: num(v.loanInterestRate),
   };
 }
 
@@ -110,9 +113,15 @@ export function FinanceFieldsInputs({
               <input type="date" className="input" min={values.loanStartDate} value={values.loanEndDate} onChange={(e) => set("loanEndDate", e.target.value)} />
             </div>
           </div>
-          <div>
-            <label className="label">סכום שיורד כל חודש (₪)</label>
-            <input type="number" step="0.01" inputMode="decimal" className="input" value={values.loanMonthlyPayment} onChange={(e) => set("loanMonthlyPayment", e.target.value)} />
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label className="label">סכום שיורד כל חודש (₪)</label>
+              <input type="number" step="0.01" inputMode="decimal" className="input" value={values.loanMonthlyPayment} onChange={(e) => set("loanMonthlyPayment", e.target.value)} />
+            </div>
+            <div>
+              <label className="label">ריבית שנתית (%)</label>
+              <input type="number" step="0.01" inputMode="decimal" className="input" value={values.loanInterestRate} onChange={(e) => set("loanInterestRate", e.target.value)} />
+            </div>
           </div>
         </div>
       )}

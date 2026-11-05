@@ -11,6 +11,7 @@ import { EmptyState } from "@/components/EmptyState";
 import { computeBankEffective } from "@/lib/bank";
 import { isLoanDoc, loanStats } from "@/lib/loans";
 import { israelNow } from "@/lib/israelTime";
+import { RecurringExpenses } from "@/components/RecurringExpenses";
 import { MonthlyFlowChart } from "@/components/MonthlyFlowChart";
 import { FinanceOverview, FinanceDoc } from "@/components/FinanceOverview";
 import { DEFAULT_SUBCATEGORIES, MAIN_CATEGORIES, MainCategory } from "@/lib/categories";
@@ -135,6 +136,7 @@ export default async function CategoryPage({
       {category === "פיננסים" && <MonthlyFlowChart mode="both" />}
       {category === "הכנסות" && <MonthlyFlowChart mode="income" />}
       {category === "הוצאות" && <MonthlyFlowChart mode="expense" />}
+      {category === "הוצאות" && <RecurringExpenses />}
 
       {category === "פיננסים" ? (
         <FinanceOverview

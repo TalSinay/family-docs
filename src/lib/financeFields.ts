@@ -27,6 +27,13 @@ export function sanitizeFinanceFields(body: Record<string, unknown>): Record<str
       out[key] = typeof v === "string" && /^\d{4}-\d{2}-\d{2}$/.test(v) ? v : null;
     }
   }
+  if ("loanInterestRate" in body) {
+    const n = numOrNull(body.loanInterestRate);
+    if (n !== undefined) out.loanInterestRate = n;
+  }
+  if ("loanSourceKey" in body) {
+    out.loanSourceKey = typeof body.loanSourceKey === "string" ? body.loanSourceKey.slice(0, 200) : null;
+  }
   if ("loanMonthlyPayment" in body) {
     const n = numOrNull(body.loanMonthlyPayment);
     if (n !== undefined) out.loanMonthlyPayment = n;

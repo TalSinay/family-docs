@@ -60,3 +60,16 @@ export function loanStats(l: LoanInput, today: string): LoanStats | null {
     ended: remaining === 0,
   };
 }
+
+// "YYYY-MM-DD" + n חודשים, באותו יום בחודש (מוגבל לאורך החודש החדש)
+export function addMonthsStr(dateStr: string, n: number): string {
+  return paymentDate(dateStr, n);
+}
+
+// מספר התשלומים מהתחלה ועד סיום (כולל), או null אם התאריכים לא תקינים
+export function countPayments(start: string, end: string): number | null {
+  if (!DATE_RE.test(start) || !DATE_RE.test(end) || end < start) return null;
+  const s = parts(start);
+  const e = parts(end);
+  return (e.y - s.y) * 12 + (e.m - s.m) + 1;
+}

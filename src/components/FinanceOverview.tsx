@@ -22,6 +22,7 @@ export type FinanceDoc = {
   loanStartDate?: string;
   loanEndDate?: string;
   loanMonthlyPayment?: number;
+  loanInterestRate?: number;
   loanOriginal?: number; // סכום מקורי (amount מוחלף ביתרה משוערת)
   loanTotalPayments?: number;
   loanRemainingPayments?: number;
@@ -307,6 +308,7 @@ export function FinanceOverview({ initialDocs, sub }: { initialDocs: FinanceDoc[
                       <span className="text-xs text-slate-500">
                         {formatCurrency(d.loanMonthlyPayment)} לחודש
                         {d.loanRemainingPayments != null && ` · נשארו ${d.loanRemainingPayments} תשלומים`}
+                        {d.loanInterestRate != null && ` · ריבית ${d.loanInterestRate}%`}
                       </span>
                     )}
                     {d.subcategory !== "הלוואה" && (

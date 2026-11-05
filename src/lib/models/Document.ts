@@ -53,6 +53,8 @@ export interface IDocument {
   loanStartDate?: string; // YYYY-MM-DD
   loanEndDate?: string; // YYYY-MM-DD
   loanMonthlyPayment?: number;
+  loanInterestRate?: number; // ריבית שנתית באחוזים (מידע בלבד)
+  loanSourceKey?: string; // מפתח ההוצאה הקבועה שממנה זוהתה ההלוואה (lib/recurring.ts)
   importBatchId?: string; // מזהה ייבוא מקובץ (src/app/import), כדי שאפשר יהיה למחוק ייבוא שלם
   importFileName?: string;
   // רשומת הבנק הקבועה (אחת ל-workspace): amount = היתרה לתחילת bankBaseMonth; כש-bankAutoSync
@@ -127,6 +129,8 @@ const DocumentSchema = new Schema<IDocument>({
   loanStartDate: { type: String },
   loanEndDate: { type: String },
   loanMonthlyPayment: { type: Number },
+  loanInterestRate: { type: Number },
+  loanSourceKey: { type: String },
   importBatchId: { type: String },
   importFileName: { type: String },
   isBank: { type: Boolean, default: false },

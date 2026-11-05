@@ -51,6 +51,7 @@ type DocData = {
   loanStartDate?: string;
   loanEndDate?: string;
   loanMonthlyPayment?: number;
+  loanInterestRate?: number;
   isBank?: boolean;
   amountHistory?: { amount: number; at: string }[];
   dueDate?: string;
@@ -96,6 +97,7 @@ export function DocumentDetail({ doc: initialDoc }: { doc: DocData }) {
     loanStartDate: initialDoc.loanStartDate || "",
     loanEndDate: initialDoc.loanEndDate || "",
     loanMonthlyPayment: initialDoc.loanMonthlyPayment != null ? String(initialDoc.loanMonthlyPayment) : "",
+    loanInterestRate: initialDoc.loanInterestRate != null ? String(initialDoc.loanInterestRate) : "",
   });
   const [dueDate, setDueDate] = useState(initialDoc.dueDate || "");
   const [dueDateTitle, setDueDateTitle] = useState(initialDoc.dueDateTitle || "");

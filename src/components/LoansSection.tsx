@@ -37,6 +37,7 @@ export function LoansSection({ loans }: { loans: FinanceDoc[] }) {
   const withEnd = loans.filter((l) => l.loanEndDate);
   const active = withEnd.filter((l) => (l.loanEndDate as string) > today).sort((a, b) => (a.loanEndDate as string).localeCompare(b.loanEndDate as string));
   const finished = withEnd.length - active.length;
+  const noEnd = loans.filter((l) => !l.loanEndDate);
 
   const totalRemaining = loans.reduce((s, l) => s + (l.amount ?? 0), 0);
   const totalMonthly = active.reduce((s, l) => s + (l.loanMonthlyPayment ?? 0), 0);
@@ -76,6 +77,9 @@ export function LoansSection({ loans }: { loans: FinanceDoc[] }) {
             <p className="text-sm font-bold mt-0.5">{lastEnd ? fmt(lastEnd) : "—"}</p>
           </div>
         </div>
+        {noEnd.length > 0 && (
+          <p className="text-xs text-amber-700 mt-2">ללא תאריך סיום (לא מופיעות בציר): {noEnd.map((l) => l.title).join(", ")}. אפשר להשלים בעמוד ההלוואה.</p>
+        )}
         {finished > 0 && <p className="text-xs text-slate-400 mt-2">{finished} הלוואות כבר הסתיימו.</p>}
       </div>
 
@@ -109,6 +113,7 @@ export function LoansSection({ loans }: { loans: FinanceDoc[] }) {
                     <p className="text-xs text-slate-500 mt-1">
                       נגמרת ב-{fmt(end)} · {monthsText(l.loanMonthsLeft ?? 0)}
                       {l.loanMonthlyPayment != null && ` · ${formatCurrency(l.loanMonthlyPayment)} לחודש`}
+                      {l.loanInterestRate != null && ` · ריבית ${l.loanInterestRate}%`}
                     </p>
                   </div>
                 );
