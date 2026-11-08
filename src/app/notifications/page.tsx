@@ -31,6 +31,7 @@ type Scheduled = {
   nextDate: string;
   time: string;
   customTime: boolean;
+  oneTime?: boolean;
   editDate: string;
   editTime: string;
 };
@@ -112,7 +113,9 @@ export default function NotificationsPage() {
     try {
       let payload: Record<string, unknown>;
       if (item.kind === "monthly") {
-        payload = { title: editName.trim(), dayOfMonth: Number(editDate), time: editTime };
+        payload = item.oneTime
+          ? { title: editName.trim(), oneTimeDate: editDate, time: editTime }
+          : { title: editName.trim(), dayOfMonth: Number(editDate), time: editTime };
       } else if (item.kind === "event") {
         payload = { title: editName.trim(), notifyTime: editTime };
       } else if (item.kind === "task") {
@@ -143,7 +146,7 @@ export default function NotificationsPage() {
   async function deleteScheduled(item: Scheduled) {
     const msg =
       item.kind === "monthly"
-        ? "למחוק את התזכורת החודשית?"
+        ? item.oneTime ? "למחוק את התזכורת?" : "למחוק את התזכורת החודשית?"
         : item.kind === "event"
         ? "למחוק את האירוע מהיומן? (גם ההתראה תימחק)"
         : item.kind === "task"
@@ -178,12 +181,18 @@ export default function NotificationsPage() {
   const [showAdd, setShowAdd] = useState(false);
   const [newTitle, setNewTitle] = useState("");
   const [newDay, setNewDay] = useState("1");
+  const [newMode, setNewMode] = useState<"monthly" | "once">("monthly");
+  const [newDate, setNewDate] = useState("");
   const [newTime, setNewTime] = useState("");
   const [adding, setAdding] = useState(false);
 
   async function addReminder(e: React.FormEvent) {
     e.preventDefault();
     if (!newTitle.trim()) return;
+    if (newMode === "once" && !newDate) {
+      setError("בחר תאריך לתזכורת");
+      return;
+    }
     setAdding(true);
     setError("");
     try {
@@ -192,7 +201,7 @@ export default function NotificationsPage() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           title: newTitle.trim(),
-          dayOfMonth: Number(newDay),
+          ...(newMode === "once" ? { oneTimeDate: newDate } : { dayOfMonth: Number(newDay) }),
           time: newTime || undefined,
         }),
       });
@@ -202,6 +211,8 @@ export default function NotificationsPage() {
       }
       setNewTitle("");
       setNewDay("1");
+      setNewDate("");
+      setNewMode("monthly");
       setNewTime("");
       setShowAdd(false);
       await load();
@@ -235,7 +246,18 @@ export default function NotificationsPage() {
 
       {showAdd && (
         <form onSubmit={addReminder} className="card p-4 space-y-3">
-          <p className="font-medium">תזכורת חודשית חוזרת</p>
+          <div className="flex rounded-xl bg-slate-100 p-1 text-sm">
+            {(["monthly", "once"] as const).map((m) => (
+              <button
+                key={m}
+                type="button"
+                onClick={() => setNewMode(m)}
+                className={`flex-1 rounded-lg py-1.5 font-medium ${newMode === m ? "bg-white shadow text-slate-900" : "text-slate-500"}`}
+              >
+                {m === "monthly" ? "חודשית (חוזרת)" : "חד-פעמית"}
+              </button>
+            ))}
+          </div>
           <div>
             <label className="label">מה להזכיר?</label>
             <textarea
@@ -246,17 +268,24 @@ export default function NotificationsPage() {
             />
           </div>
           <div className="flex gap-3">
-            <div className="w-24">
-              <label className="label">יום בחודש</label>
-              <input
-                type="number"
-                min="1"
-                max="28"
-                className="input text-center"
-                value={newDay}
-                onChange={(e) => setNewDay(e.target.value)}
-              />
-            </div>
+            {newMode === "monthly" ? (
+              <div className="w-24">
+                <label className="label">יום בחודש</label>
+                <input
+                  type="number"
+                  min="1"
+                  max="28"
+                  className="input text-center"
+                  value={newDay}
+                  onChange={(e) => setNewDay(e.target.value)}
+                />
+              </div>
+            ) : (
+              <div className="flex-1">
+                <label className="label">תאריך</label>
+                <input type="date" className="input" value={newDate} onChange={(e) => setNewDate(e.target.value)} />
+              </div>
+            )}
             <div className="flex-1">
               <label className="label">שעה</label>
               <input type="time" className="input" value={newTime} onChange={(e) => setNewTime(e.target.value)} />
@@ -265,7 +294,9 @@ export default function NotificationsPage() {
           </div>
           {newTitle.trim() && (
             <p className="text-sm text-slate-600 bg-teal-50 rounded-lg px-3 py-2">
-              תישלח ב-{Number(newDay) || 1} לכל חודש בשעה {newTime || globalTime}:{" "}
+              {newMode === "monthly"
+                ? `תישלח ב-${Number(newDay) || 1} לכל חודש בשעה ${newTime || globalTime}:`
+                : `תישלח פעם אחת ${newDate ? newDate.split("-").reverse().join("/") : "(בחר תאריך)"} בשעה ${newTime || globalTime}:`}{" "}
               <span className="font-medium">{newTitle.trim()}</span>
             </p>
           )}
@@ -304,9 +335,9 @@ export default function NotificationsPage() {
                       </div>
                       <div className="flex gap-3">
                         {item.kind !== "event" && (
-                        <div className={item.kind === "monthly" ? "w-24" : "flex-1"}>
-                          <label className="label">{item.kind === "monthly" ? "יום בחודש" : "תאריך"}</label>
-                          {item.kind === "monthly" ? (
+                        <div className={item.kind === "monthly" && !item.oneTime ? "w-24" : "flex-1"}>
+                          <label className="label">{item.kind === "monthly" && !item.oneTime ? "יום בחודש" : "תאריך"}</label>
+                          {item.kind === "monthly" && !item.oneTime ? (
                             <input
                               type="number"
                               min="1"

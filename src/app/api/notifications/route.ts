@@ -35,7 +35,8 @@ export type ScheduledItem = {
   time: string; // HH:MM בפועל
   customTime: boolean; // האם נקבעה שעה ייעודית (ולא הגלובלית)
   // ערכי עריכה
-  editDate: string; // monthly: dayOfMonth כמחרוזת; אחרת: dueDate
+  oneTime?: boolean; // תזכורת חד-פעמית (kind "monthly" עם תאריך מוחלט)
+  editDate: string; // monthly: dayOfMonth כמחרוזת (חד-פעמית: תאריך); אחרת: dueDate
   editTime: string; // השעה הייעודית או ריק
 };
 
@@ -70,21 +71,39 @@ export async function GET() {
 
   for (const r of reminders) {
     const time = r.time || globalTime;
+    if (r.oneTimeDate) {
+      // חד-פעמית: מוצגת עד שנשלחה; אחרי השליחה (או אם התאריך עבר) היא כבר לא "מתוזמנת"
+      if (r.lastSentOn || r.oneTimeDate < today) continue;
+      items.push({
+        kind: "monthly",
+        id: String(r._id),
+        name: r.title,
+        label: "תזכורת חד-פעמית",
+        oneTime: true,
+        nextDate: r.oneTimeDate,
+        time,
+        customTime: !!r.time,
+        editDate: r.oneTimeDate,
+        editTime: r.time || "",
+      });
+      continue;
+    }
+    const dayOfMonth = r.dayOfMonth as number;
     // התזכורת עוד "בתוקף" להיום אם היום הוא יום התזכורת ועדיין לא נשלחה
-    const dueToday = td === r.dayOfMonth && r.lastSentOn !== today;
+    const dueToday = td === dayOfMonth && r.lastSentOn !== today;
     let nextDate: string;
     if (dueToday) nextDate = today;
     else {
       let y = ty;
       let m = tm;
-      if (td >= r.dayOfMonth) {
+      if (td >= dayOfMonth) {
         m += 1;
         if (m > 12) {
           m = 1;
           y += 1;
         }
       }
-      nextDate = `${y}-${String(m).padStart(2, "0")}-${String(r.dayOfMonth).padStart(2, "0")}`;
+      nextDate = `${y}-${String(m).padStart(2, "0")}-${String(dayOfMonth).padStart(2, "0")}`;
     }
     items.push({
       kind: "monthly",
@@ -94,7 +113,7 @@ export async function GET() {
       nextDate,
       time,
       customTime: !!r.time,
-      editDate: String(r.dayOfMonth),
+      editDate: String(dayOfMonth),
       editTime: r.time || "",
     });
   }

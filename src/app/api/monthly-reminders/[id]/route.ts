@@ -26,7 +26,13 @@ export async function PATCH(
     }
     reminder.title = String(body.title).trim();
   }
-  if ("dayOfMonth" in body) {
+  if ("oneTimeDate" in body && body.oneTimeDate) {
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(body.oneTimeDate)) {
+      return NextResponse.json({ error: "תאריך לא תקין" }, { status: 400 });
+    }
+    reminder.oneTimeDate = body.oneTimeDate;
+    reminder.dayOfMonth = undefined;
+  } else if ("dayOfMonth" in body && !reminder.oneTimeDate) {
     const day = Number(body.dayOfMonth);
     if (!Number.isInteger(day) || day < 1 || day > 28) {
       return NextResponse.json({ error: "יום בחודש צריך להיות בין 1 ל-28" }, { status: 400 });
@@ -43,7 +49,9 @@ export async function PATCH(
   const { date: today, time: nowTime } = israelNow();
   const settings = await AppSettings.findOne({ key: "global" }).lean();
   const effectiveTime = reminder.time || settings?.notificationTime || DEFAULT_NOTIFICATION_TIME;
-  const passedToday = Number(today.split("-")[2]) === reminder.dayOfMonth && nowTime >= effectiveTime;
+  const passedToday = reminder.oneTimeDate
+    ? reminder.oneTimeDate === today && nowTime >= effectiveTime
+    : Number(today.split("-")[2]) === reminder.dayOfMonth && nowTime >= effectiveTime;
   reminder.lastSentOn = passedToday ? today : undefined;
 
   await reminder.save();

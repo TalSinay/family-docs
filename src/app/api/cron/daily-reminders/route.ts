@@ -120,7 +120,7 @@ export async function POST(req: NextRequest) {
 
   // 3. תזכורות חודשיות חוזרות שחל היום תורן שלהן
   const candidates = await MonthlyReminder.find({
-    dayOfMonth: todayDay,
+    $or: [{ dayOfMonth: todayDay }, { oneTimeDate: today }],
     lastSentOn: { $ne: today },
   }).lean();
   let monthlySent = 0;
@@ -128,7 +128,7 @@ export async function POST(req: NextRequest) {
     if (nowTime < (reminder.time || globalTime)) continue;
     if (!(await claim(MonthlyReminder, reminder._id, "lastSentOn"))) continue;
     await notify(reminder.workspaceId.toString(), "monthly", {
-      title: "תזכורת חודשית",
+      title: reminder.oneTimeDate ? "תזכורת" : "תזכורת חודשית",
       body: reminder.title,
       url: "/notifications",
     });

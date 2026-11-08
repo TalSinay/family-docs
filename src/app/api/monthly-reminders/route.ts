@@ -10,7 +10,7 @@ export async function GET() {
   if (error) return error;
 
   await connectToDatabase();
-  const reminders = await MonthlyReminder.find({ workspaceId }).sort({ dayOfMonth: 1 }).lean();
+  const reminders = await MonthlyReminder.find({ workspaceId }).sort({ oneTimeDate: 1, dayOfMonth: 1 }).lean();
   return NextResponse.json(reminders);
 }
 
@@ -18,12 +18,16 @@ export async function POST(req: NextRequest) {
   const { session, workspaceId, error } = await requireWorkspace();
   if (error) return error;
 
-  const { title, dayOfMonth, time } = await req.json();
+  const { title, dayOfMonth, time, oneTimeDate } = await req.json();
+  const isOneTime = typeof oneTimeDate === "string" && oneTimeDate !== "";
   const day = Number(dayOfMonth);
   if (!title || !String(title).trim()) {
     return NextResponse.json({ error: "חסרה כותרת לתזכורת" }, { status: 400 });
   }
-  if (!Number.isInteger(day) || day < 1 || day > 28) {
+  if (isOneTime && !/^\d{4}-\d{2}-\d{2}$/.test(oneTimeDate)) {
+    return NextResponse.json({ error: "תאריך לא תקין" }, { status: 400 });
+  }
+  if (!isOneTime && (!Number.isInteger(day) || day < 1 || day > 28)) {
     return NextResponse.json({ error: "יום בחודש צריך להיות בין 1 ל-28" }, { status: 400 });
   }
 
@@ -39,12 +43,17 @@ export async function POST(req: NextRequest) {
   const { date: today, time: nowTime } = israelNow();
   const settings = await AppSettings.findOne({ key: "global" }).lean();
   const effectiveTime = customTime || settings?.notificationTime || DEFAULT_NOTIFICATION_TIME;
-  const alreadyPassedToday = Number(today.split("-")[2]) === day && nowTime >= effectiveTime;
+  if (isOneTime && oneTimeDate < today) {
+    return NextResponse.json({ error: "התאריך כבר עבר" }, { status: 400 });
+  }
+  const alreadyPassedToday = isOneTime
+    ? oneTimeDate === today && nowTime >= effectiveTime
+    : Number(today.split("-")[2]) === day && nowTime >= effectiveTime;
 
   const reminder = await MonthlyReminder.create({
     workspaceId,
     title: String(title).trim(),
-    dayOfMonth: day,
+    ...(isOneTime ? { oneTimeDate } : { dayOfMonth: day }),
     time: customTime,
     lastSentOn: alreadyPassedToday ? today : undefined,
     createdBy: session!.user.id,
