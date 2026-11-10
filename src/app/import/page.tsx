@@ -98,6 +98,9 @@ export default function ImportPage() {
   const [counts, setCounts] = useState<{ expenses: number; income: number } | null>(null);
   const [clearScope, setClearScope] = useState<"all" | "expenses" | "income">("all");
   const [clearing, setClearing] = useState(false);
+  const [backedUp, setBackedUp] = useState(false);
+  const [restoring, setRestoring] = useState(false);
+  const [restoreMsg, setRestoreMsg] = useState("");
 
   const loadBatches = useCallback(async () => {
     try {
@@ -130,6 +133,51 @@ export default function ImportPage() {
     }
   }
 
+  function downloadBackup() {
+    const a = document.createElement("a");
+    a.href = `/api/documents/import?export=1&scope=${clearScope}`;
+    a.click();
+    setBackedUp(true);
+  }
+
+  // שחזור מקובץ גיבוי שהורד מכאן (CSV: תאריך, סוג, תיאור, סכום, תת-קטגוריה, שם קובץ ייבוא)
+  async function restoreBackup(file: File) {
+    setRestoring(true);
+    setRestoreMsg("");
+    setSubmitError("");
+    try {
+      const text = await file.text();
+      const parsed = Papa.parse<Record<string, string>>(text.replace(/^\uFEFF/, ""), { header: true, skipEmptyLines: true });
+      const entries = parsed.data
+        .map((r) => ({
+          date: (r["תאריך"] || "").trim(),
+          category: (r["סוג"] || "").trim(),
+          title: (r["תיאור"] || "").trim(),
+          amount: Number(r["סכום"]),
+          subcategory: (r["תת-קטגוריה"] || "").trim() || undefined,
+        }))
+        .filter((e) => e.date && e.title && Number.isFinite(e.amount) && (e.category === "הוצאות" || e.category === "הכנסות"));
+      if (entries.length === 0) throw new Error("הקובץ לא נראה כמו קובץ גיבוי של האפליקציה");
+      let created = 0;
+      for (let i = 0; i < entries.length; i += 2000) {
+        const res = await fetch("/api/documents/import", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ entries: entries.slice(i, i + 2000), fileName: `שחזור מגיבוי - ${file.name}`, restore: true }),
+        });
+        const body = await res.json().catch(() => ({}));
+        if (!res.ok) throw new Error(body.error || "השחזור נכשל");
+        created += body.created ?? 0;
+      }
+      setRestoreMsg(`שוחזרו ${created} רשומות מתוך ${entries.length}`);
+      await loadBatches();
+    } catch (e) {
+      setSubmitError(e instanceof Error ? e.message : "השחזור נכשל");
+    } finally {
+      setRestoring(false);
+    }
+  }
+
   // התאריך האחרון שנקלט בכל הייבואים - כדי לדעת מאיזה תאריך להמשיך בפעם הבאה
   const lastImportedDate = useMemo(() => {
     if (!batches || batches.length === 0) return "";
@@ -139,6 +187,7 @@ export default function ImportPage() {
   async function clearAll() {
     const n = counts ? (clearScope === "all" ? counts.expenses + counts.income : clearScope === "expenses" ? counts.expenses : counts.income) : 0;
     const what = clearScope === "all" ? "כל ההוצאות וההכנסות" : clearScope === "expenses" ? "כל ההוצאות" : "כל ההכנסות";
+    if (!backedUp && !confirm("לא הורדת גיבוי בעמוד הזה. מומלץ ללחוץ קודם על 'הורד גיבוי'. להמשיך בלי גיבוי?")) return;
     const typed = prompt(
       `פעולה זו תמחק ${what} (${n} רשומות). קרן השתלמות, פנסיה, השקעות והלוואות לא יימחקו. אי אפשר לשחזר.\n\nכדי לאשר, כתוב: מחק`
     );
@@ -373,12 +422,36 @@ export default function ImportPage() {
           </select>
           <button
             type="button"
+            onClick={downloadBackup}
+            className="px-4 py-2 rounded-xl border border-slate-300 font-medium"
+          >
+            הורד גיבוי
+          </button>
+          <button
+            type="button"
             disabled={clearing || !counts}
             onClick={clearAll}
             className="px-4 py-2 rounded-xl bg-red-600 text-white font-medium disabled:opacity-50 flex items-center gap-1"
           >
             <Trash2 size={16} /> {clearing ? "מנקה..." : "נקה"}
           </button>
+        </div>
+        <div className="pt-2 border-t border-slate-100">
+          <label className="label">שחזור מקובץ גיבוי (אם משהו השתבש)</label>
+          <input
+            type="file"
+            accept=".csv"
+            disabled={restoring}
+            onChange={(e) => {
+              const f = e.target.files?.[0];
+              if (f) restoreBackup(f);
+              e.target.value = "";
+            }}
+            className="text-sm"
+          />
+          {restoring && <p className="text-xs text-slate-500 mt-1">משחזר...</p>}
+          {restoreMsg && <p className="text-xs text-emerald-700 mt-1">{restoreMsg}</p>}
+          <p className="text-xs text-slate-400 mt-1">הגיבוי כולל תאריך, סוג, תיאור, סכום ותת-קטגוריה. קבצים שצורפו ידנית לרשומות לא נכללים בו.</p>
         </div>
       </section>
 

@@ -8,7 +8,7 @@ import mongoose from "mongoose";
 
 const IMPORT_NOTE = "יובא אוטומטית מקובץ תנועות (Max)";
 
-type ImportEntry = { title: string; amount: number; date: string; category: MainCategory };
+type ImportEntry = { title: string; amount: number; date: string; category: MainCategory; subcategory?: string };
 
 const MAX_ENTRIES = 3000;
 const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
@@ -32,8 +32,9 @@ async function handlePost(req: NextRequest) {
   if (error) return error;
 
   const body = await req.json();
-  const { entries, subcategory, category, fileName } = body as {
+  const { entries, subcategory, category, fileName, restore } = body as {
     fileName?: string;
+    restore?: boolean; // שחזור מגיבוי: משמרים גם שורות זהות בתוך הקובץ (קניות זהות באותו יום)
     entries?: unknown;
     subcategory?: string;
     category?: MainCategory;
@@ -60,7 +61,8 @@ async function handlePost(req: NextRequest) {
     // סוג לכל שורה בנפרד (קובץ בנק מכיל גם הוצאות וגם הכנסות); בלי סוג - קטגוריית ברירת המחדל של הבקשה
     const entryCategory: MainCategory = e.category === "הכנסות" || e.category === "הוצאות" ? e.category : targetCategory;
     if (!title || !Number.isFinite(amount) || amount <= 0 || !DATE_RE.test(date)) continue;
-    valid.push({ title, amount, date, category: entryCategory });
+    const entrySub = typeof e.subcategory === "string" ? e.subcategory.trim().slice(0, 80) : "";
+    valid.push({ title, amount, date, category: entryCategory, subcategory: entrySub || undefined });
   }
 
   if (valid.length === 0) {
@@ -82,6 +84,17 @@ async function handlePost(req: NextRequest) {
   // בדיקת כפילויות מול מה שכבר קיים ב-workspace (לדוגמה אם הועלה אותו חודש פעמיים):
   // נטען את כל הרשומות הקיימות מאותה קטגוריה בטווח התאריכים הרלוונטי, ונבנה "חתימה"
   // של תאריך+סכום+שם לכל אחת, כדי להשוות מול הרשומות החדשות.
+  // תתי-קטגוריות ברמת שורה (שחזור מגיבוי)
+  const rowSubs = new Map<string, { cat: string; name: string }>();
+  for (const v of valid) if (v.subcategory) rowSubs.set(`${v.category}\u0000${v.subcategory}`, { cat: v.category, name: v.subcategory });
+  for (const { cat, name } of rowSubs.values()) {
+    await SubCategory.updateOne(
+      { workspaceId, category: cat, name },
+      { $setOnInsert: { workspaceId, category: cat, name } },
+      { upsert: true }
+    );
+  }
+
   const dates = valid.map((e) => e.date).sort();
   const minDate = parseLocalDate(dates[0]);
   const maxDate = parseLocalDate(dates[dates.length - 1]);
@@ -109,12 +122,12 @@ async function handlePost(req: NextRequest) {
       skipped++;
       continue;
     }
-    seen.add(sig); // מונע גם כפילות בתוך קובץ הייבוא עצמו
+    if (!restore) seen.add(sig); // מונע גם כפילות בתוך קובץ הייבוא עצמו (לא בשחזור מגיבוי)
     toCreate.push({
       workspaceId,
       title: entry.title,
       category: entry.category,
-      subcategory: subcategory || undefined,
+      subcategory: entry.subcategory || subcategory || undefined,
       notes: IMPORT_NOTE,
       importBatchId: batchId,
       importFileName: typeof fileName === "string" ? fileName.slice(0, 200) : undefined,
@@ -179,6 +192,34 @@ export async function GET(req: NextRequest) {
   const { workspaceId, error } = await requireWorkspace();
   if (error) return error;
   await connectToDatabase();
+
+  // ?export=1[&scope=all|expenses|income]: גיבוי CSV של אותן רשומות שהניקוי ימחק
+  const sp = new URL(req.url).searchParams;
+  if (sp.get("export")) {
+    const scope = sp.get("scope");
+    const cats = scope === "expenses" ? ["הוצאות"] : scope === "income" ? ["הכנסות"] : ["הוצאות", "הכנסות"];
+    const rows = await DocumentModel.find({ workspaceId, category: { $in: cats }, ...CLEARABLE })
+      .select("title category subcategory amount uploadedAt importFileName")
+      .sort({ uploadedAt: 1 })
+      .lean();
+    const esc = (v: unknown) => {
+      const s = String(v ?? "");
+      return /[",\n\r]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
+    };
+    const lines = ["תאריך,סוג,תיאור,סכום,תת-קטגוריה,שם קובץ ייבוא"];
+    for (const d of rows) {
+      const dt = new Date(d.uploadedAt);
+      const day = `${dt.getFullYear()}-${String(dt.getMonth() + 1).padStart(2, "0")}-${String(dt.getDate()).padStart(2, "0")}`;
+      lines.push([day, d.category, d.title, d.amount ?? 0, d.subcategory ?? "", d.importFileName ?? ""].map(esc).join(","));
+    }
+    const stamp = new Date().toISOString().slice(0, 10);
+    return new NextResponse("\uFEFF" + lines.join("\r\n"), {
+      headers: {
+        "Content-Type": "text/csv; charset=utf-8",
+        "Content-Disposition": `attachment; filename="backup-${stamp}.csv"`,
+      },
+    });
+  }
 
   // ?counts=1: כמה הוצאות/הכנסות יימחקו בניקוי כללי
   if (new URL(req.url).searchParams.get("counts")) {
