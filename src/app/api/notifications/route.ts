@@ -194,6 +194,7 @@ export async function GET() {
 
   return NextResponse.json({
     now: { date: today, time: nowTime },
+    cronAgeMinutes: settings?.lastCronRunAt ? Math.round((Date.now() - new Date(settings.lastCronRunAt).getTime()) / 60000) : null,
     globalTime,
     scheduled: items,
     sent: sent.map((s) => ({

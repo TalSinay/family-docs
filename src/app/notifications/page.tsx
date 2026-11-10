@@ -40,6 +40,7 @@ type Sent = { id: string; kind: Kind; title: string; body: string; url?: string;
 
 type Data = {
   now: { date: string; time: string };
+  cronAgeMinutes?: number | null;
   globalTime: string;
   scheduled: Scheduled[];
   sent: Sent[];
@@ -241,6 +242,18 @@ export default function NotificationsPage() {
           <Plus size={16} /> תזכורת
         </button>
       </div>
+
+      {data && (() => {
+        const ageMin = data.cronAgeMinutes ?? null;
+        const stale = ageMin === null || ageMin > 90;
+        return (
+          <div className={`rounded-xl px-3 py-2 text-xs ${stale ? "bg-amber-50 text-amber-800" : "bg-emerald-50 text-emerald-800"}`}>
+            {ageMin === null
+              ? "השרת עוד לא קיבל פנייה מה-cron - התראות לא יישלחו עד שה-cron יפעל."
+              : `ה-cron פנה לשרת לאחרונה לפני ${ageMin < 60 ? `${ageMin} דקות` : `${Math.round(ageMin / 60)} שעות`}${stale ? " - ארוך מהצפוי, התראות עלולות להתעכב" : ""}.`}
+          </div>
+        );
+      })()}
 
       {error && <div className="bg-red-50 text-red-700 text-sm rounded-xl px-3 py-2">{error}</div>}
 

@@ -43,6 +43,8 @@ export async function sendPushToUsers(userIds: string[], payload: PushPayload) {
         const statusCode = (err as { statusCode?: number } | undefined)?.statusCode;
         if (statusCode === 404 || statusCode === 410) {
           await PushSubscriptionModel.deleteOne({ _id: sub._id });
+        } else {
+          console.error("push send failed", statusCode, err instanceof Error ? err.message : err);
         }
       }
     })

@@ -23,7 +23,7 @@ function addDays(dateStr: string, days: number): string {
   ).padStart(2, "0")}`;
 }
 
-export async function POST(req: NextRequest) {
+async function handle(req: NextRequest) {
   const authHeader = req.headers.get("authorization");
   const expected = `Bearer ${process.env.CRON_SECRET}`;
   if (!process.env.CRON_SECRET || authHeader !== expected) {
@@ -154,6 +154,11 @@ export async function POST(req: NextRequest) {
     eventsSent++;
   }
 
+  await AppSettings.updateOne(
+    { key: "global" },
+    { $set: { lastCronRunAt: new Date().toISOString(), lastCronSent: sentCount } }
+  );
+
   return NextResponse.json({
     today,
     calendarEvents: eventsSent,
@@ -165,3 +170,7 @@ export async function POST(req: NextRequest) {
     sentCount,
   });
 }
+
+// POST: GitHub Actions / cron חיצוני. GET: Vercel Cron (שולח Authorization: Bearer CRON_SECRET בבקשת GET).
+export const POST = handle;
+export const GET = handle;
