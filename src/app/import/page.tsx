@@ -95,11 +95,16 @@ export default function ImportPage() {
   const [submitError, setSubmitError] = useState("");
   const [batches, setBatches] = useState<ImportBatch[] | null>(null);
   const [deletingKey, setDeletingKey] = useState("");
+  const [counts, setCounts] = useState<{ expenses: number; income: number } | null>(null);
+  const [clearScope, setClearScope] = useState<"all" | "expenses" | "income">("all");
+  const [clearing, setClearing] = useState(false);
 
   const loadBatches = useCallback(async () => {
     try {
       const res = await fetch("/api/documents/import");
       if (res.ok) setBatches(await res.json());
+      const c = await fetch("/api/documents/import?counts=1");
+      if (c.ok) setCounts(await c.json());
     } catch {
       /* לא קריטי */
     }
@@ -122,6 +127,32 @@ export default function ImportPage() {
       setSubmitError("מחיקת הייבוא נכשלה");
     } finally {
       setDeletingKey("");
+    }
+  }
+
+  // התאריך האחרון שנקלט בכל הייבואים - כדי לדעת מאיזה תאריך להמשיך בפעם הבאה
+  const lastImportedDate = useMemo(() => {
+    if (!batches || batches.length === 0) return "";
+    return batches.reduce((max, b) => (b.to > max ? b.to : max), "");
+  }, [batches]);
+
+  async function clearAll() {
+    const n = counts ? (clearScope === "all" ? counts.expenses + counts.income : clearScope === "expenses" ? counts.expenses : counts.income) : 0;
+    const what = clearScope === "all" ? "כל ההוצאות וההכנסות" : clearScope === "expenses" ? "כל ההוצאות" : "כל ההכנסות";
+    const typed = prompt(
+      `פעולה זו תמחק ${what} (${n} רשומות). קרן השתלמות, פנסיה, השקעות והלוואות לא יימחקו. אי אפשר לשחזר.\n\nכדי לאשר, כתוב: מחק`
+    );
+    if (typed?.trim() !== "מחק") return;
+    setClearing(true);
+    setSubmitError("");
+    try {
+      const res = await fetch(`/api/documents/import?clear=${clearScope}`, { method: "DELETE" });
+      if (!res.ok) throw new Error();
+      await loadBatches();
+    } catch {
+      setSubmitError("הניקוי נכשל");
+    } finally {
+      setClearing(false);
     }
   }
 
@@ -291,6 +322,12 @@ export default function ImportPage() {
         </p>
       </div>
 
+      {lastImportedDate && (
+        <div className="rounded-xl bg-teal-50 text-teal-900 px-4 py-3 text-sm">
+          הייבוא הקודם היה עד לתאריך <span className="font-bold">{lastImportedDate.split("-").reverse().join(".")}</span> - בפעם הבאה אפשר לקחת מהקובץ תנועות מהתאריך הזה ואילך (רשומות כפולות מזוהות ולא יוכנסו שוב).
+        </div>
+      )}
+
       <section className="card p-5 space-y-3">
         <h2 className="font-bold text-lg">קבצים שיובאו</h2>
         <p className="text-xs text-slate-500">מחיקה מסירה את כל ההוצאות וההכנסות שנוצרו מאותו קובץ, למקרה של טעות.</p>
@@ -320,6 +357,29 @@ export default function ImportPage() {
             </button>
           </div>
         ))}
+      </section>
+
+      <section className="card p-5 space-y-3 border-red-100">
+        <h2 className="font-bold text-lg">ניקוי הוצאות והכנסות</h2>
+        <p className="text-xs text-slate-500">
+          מוחק את כל ההוצאות וההכנסות כדי להתחיל מחדש עם קובץ בנק. לא נוגע בקרן השתלמות, פנסיה, השקעות, הלוואות, מסמכים אחרים ותשלומים חודשיים קבועים.
+          {counts && ` כרגע: ${counts.expenses} הוצאות · ${counts.income} הכנסות.`}
+        </p>
+        <div className="flex gap-2 items-center">
+          <select className="input flex-1" value={clearScope} onChange={(e) => setClearScope(e.target.value as "all" | "expenses" | "income")}>
+            <option value="all">הוצאות והכנסות</option>
+            <option value="expenses">הוצאות בלבד</option>
+            <option value="income">הכנסות בלבד</option>
+          </select>
+          <button
+            type="button"
+            disabled={clearing || !counts}
+            onClick={clearAll}
+            className="px-4 py-2 rounded-xl bg-red-600 text-white font-medium disabled:opacity-50 flex items-center gap-1"
+          >
+            <Trash2 size={16} /> {clearing ? "מנקה..." : "נקה"}
+          </button>
+        </div>
       </section>
 
       <section className="card p-5 space-y-4">

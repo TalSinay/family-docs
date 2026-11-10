@@ -172,10 +172,22 @@ type BatchRow = {
   to: string;
 };
 
-export async function GET() {
+// תשלומים חודשיים קבועים (isMonthlyPayment) הם "תבניות" שה-cron מפיק מהן הוצאות, ולכן לא נמחקים בניקוי
+const CLEARABLE = { isMonthlyPayment: { $ne: true } };
+
+export async function GET(req: NextRequest) {
   const { workspaceId, error } = await requireWorkspace();
   if (error) return error;
   await connectToDatabase();
+
+  // ?counts=1: כמה הוצאות/הכנסות יימחקו בניקוי כללי
+  if (new URL(req.url).searchParams.get("counts")) {
+    const [expenses, income] = await Promise.all([
+      DocumentModel.countDocuments({ workspaceId, category: "הוצאות", ...CLEARABLE }),
+      DocumentModel.countDocuments({ workspaceId, category: "הכנסות", ...CLEARABLE }),
+    ]);
+    return NextResponse.json({ expenses, income });
+  }
 
   const docs = await DocumentModel.find({
     workspaceId,
@@ -219,8 +231,20 @@ export async function GET() {
 export async function DELETE(req: NextRequest) {
   const { workspaceId, error } = await requireWorkspace();
   if (error) return error;
-  const key = new URL(req.url).searchParams.get("batch") || "";
+  const params = new URL(req.url).searchParams;
+  const key = params.get("batch") || "";
   await connectToDatabase();
+
+  // ?clear=all|expenses|income: ניקוי כללי של הוצאות והכנסות בלבד. לא נוגע בשאר הקטגוריות
+  // (פיננסים - קרן השתלמות/פנסיה/השקעות/הלוואות, תעודות וכו') ולא בתשלומים חודשיים קבועים.
+  const clear = params.get("clear");
+  if (clear) {
+    const categories =
+      clear === "all" ? ["הוצאות", "הכנסות"] : clear === "expenses" ? ["הוצאות"] : clear === "income" ? ["הכנסות"] : null;
+    if (!categories) return NextResponse.json({ error: "פרמטר ניקוי לא תקין" }, { status: 400 });
+    const res = await DocumentModel.deleteMany({ workspaceId, category: { $in: categories }, ...CLEARABLE });
+    return NextResponse.json({ deleted: res.deletedCount });
+  }
 
   if (/^legacy-\d+$/.test(key)) {
     const start = Number(key.slice(7));
