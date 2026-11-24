@@ -13,18 +13,17 @@ export async function GET(req: NextRequest) {
 
   if (sp.get("batches")) {
     const rows = await DetailEntry.find({ workspaceId })
-      .select("kind account amount date importBatchId importFileName createdAt")
+      .select("kind amount date importBatchId importFileName createdAt")
       .lean();
     const map = new Map<
       string,
-      { id: string; account: string; fileName: string; importedAt: string; expenses: number; income: number; from: string; to: string }
+      { id: string; fileName: string; importedAt: string; expenses: number; income: number; from: string; to: string }
     >();
     for (const r of rows) {
       let b = map.get(r.importBatchId);
       if (!b) {
         b = {
           id: r.importBatchId,
-          account: r.account,
           fileName: r.importFileName || "",
           importedAt: new Date(r.createdAt).toISOString(),
           expenses: 0,
@@ -44,12 +43,12 @@ export async function GET(req: NextRequest) {
 
   const kind = sp.get("kind") === "income" ? "הכנסות" : "הוצאות";
   const rows = await DetailEntry.find({ workspaceId, kind })
-    .select("title amount date account")
+    .select("title amount date")
     .sort({ date: -1 })
     .limit(30000)
     .lean();
   return NextResponse.json(
-    rows.map((r) => ({ id: String(r._id), title: r.title, amount: r.amount, date: r.date, account: r.account }))
+    rows.map((r) => ({ id: String(r._id), title: r.title, amount: r.amount, date: r.date }))
   );
 }
 

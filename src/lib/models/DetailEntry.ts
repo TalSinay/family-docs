@@ -6,7 +6,6 @@ export interface IDetailEntry {
   _id: mongoose.Types.ObjectId;
   workspaceId: mongoose.Types.ObjectId;
   kind: "הוצאות" | "הכנסות";
-  account: string; // שם החשבון, למשל "משפחת סיני"
   title: string; // בית העסק / תיאור התנועה
   amount: number; // חיובי תמיד; הסוג נקבע לפי kind
   date: string; // "YYYY-MM-DD"
@@ -18,7 +17,6 @@ export interface IDetailEntry {
 const DetailEntrySchema = new Schema<IDetailEntry>({
   workspaceId: { type: Schema.Types.ObjectId, ref: "Workspace", required: true },
   kind: { type: String, enum: ["הוצאות", "הכנסות"], required: true },
-  account: { type: String, required: true },
   title: { type: String, required: true },
   amount: { type: Number, required: true },
   date: { type: String, required: true },

@@ -100,8 +100,7 @@ export default function ImportPage() {
   const [clearing, setClearing] = useState(false);
   // יעד הייבוא: "monthly" = הוצאות/הכנסות חודשיות (נספרות בסיכומים), "detail" = פירוט בלבד (עמודי פירוט הוצאות/הכנסות, לא נספר בסיכומים)
   const [target, setTarget] = useState<"monthly" | "detail">("monthly");
-  const [account, setAccount] = useState("");
-  const [knownAccounts, setKnownAccounts] = useState<string[]>([]);
+
   const [backedUp, setBackedUp] = useState(false);
   const [restoring, setRestoring] = useState(false);
   const [restoreMsg, setRestoreMsg] = useState("");
@@ -123,20 +122,10 @@ export default function ImportPage() {
   }, [loadBatches]);
 
   useEffect(() => {
-    // כניסה מעמודי הפירוט: /import?mode=detail (ושם חשבון אחרון/שנבחר)
+    // כניסה מעמודי הפירוט: /import?mode=detail
     const sp = new URLSearchParams(window.location.search);
     // eslint-disable-next-line react-hooks/set-state-in-effect -- קריאת פרמטרי כתובת אחרי הטעינה (למניעת אי-התאמת hydration)
     if (sp.get("mode") === "detail") setTarget("detail");
-    const acc = sp.get("account");
-    if (acc) setAccount(acc);
-    fetch("/api/detail?batches=1")
-      .then((r) => (r.ok ? r.json() : []))
-      .then((list: { account: string }[]) => {
-        const names = Array.from(new Set(list.map((b) => b.account)));
-        setKnownAccounts(names);
-        if (!acc && names.length === 1) setAccount(names[0]);
-      })
-      .catch(() => {});
   }, []);
 
   async function deleteBatch(b: ImportBatch) {
@@ -357,10 +346,6 @@ export default function ImportPage() {
     setSubmitting(true);
     setSubmitError("");
     try {
-      if (target === "detail" && !account.trim()) {
-        setSubmitError("צריך להזין שם חשבון (למשל משפחת סיני)");
-        return;
-      }
       const res = await fetch(target === "detail" ? "/api/detail/import" : "/api/documents/import", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -368,7 +353,6 @@ export default function ImportPage() {
           target === "detail"
             ? {
                 fileName: fileName || undefined,
-                account: account.trim(),
                 entries: entries.map((e) => ({ title: e.title, amount: e.amount, date: e.date, kind: e.kind })),
               }
             : {
@@ -614,24 +598,7 @@ export default function ImportPage() {
                   )}
                 </div>
               )}
-              {target === "detail" ? (
-                <div>
-                  <label className="label">שם החשבון</label>
-                  <input
-                    className="input"
-                    list="detail-accounts"
-                    value={account}
-                    onChange={(e) => setAccount(e.target.value)}
-                    placeholder="לדוגמה: משפחת סיני"
-                  />
-                  <datalist id="detail-accounts">
-                    {knownAccounts.map((a) => (
-                      <option key={a} value={a} />
-                    ))}
-                  </datalist>
-                  <p className="text-xs text-slate-400 mt-1">אפשר להעלות כמה חשבונות ולסנן ביניהם בעמודי הפירוט.</p>
-                </div>
-              ) : (
+              {target === "monthly" && (
                 <div>
                   <label className="label">תת-קטגוריה (אופציונלי)</label>
                   <input
@@ -703,7 +670,7 @@ export default function ImportPage() {
               {!result ? (
                 <button
                   onClick={submitImport}
-                  disabled={entries.length === 0 || submitting || (target === "detail" && !account.trim())}
+                  disabled={entries.length === 0 || submitting}
                   className="btn-primary flex items-center gap-2 disabled:opacity-60"
                 >
                   <Upload size={16} />

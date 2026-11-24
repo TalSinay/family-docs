@@ -7,10 +7,9 @@ import { HEBREW_MONTHS, formatCurrency } from "@/lib/format";
 import { normalizeTitle } from "@/lib/recurring";
 import { ListSkeleton } from "@/components/Skeleton";
 
-type Entry = { id: string; title: string; amount: number; date: string; account: string };
+type Entry = { id: string; title: string; amount: number; date: string };
 type Batch = {
   id: string;
-  account: string;
   fileName: string;
   importedAt: string;
   expenses: number;
@@ -54,7 +53,6 @@ export function DetailView({ kind }: { kind: "expenses" | "income" }) {
   const [entries, setEntries] = useState<Entry[] | null>(null);
   const [batches, setBatches] = useState<Batch[]>([]);
   const [error, setError] = useState("");
-  const [account, setAccount] = useState(""); // "" = כל החשבונות
   const [month, setMonth] = useState(""); // "" = ברירת מחדל (החודש האחרון), "all" = כל התקופה
   const [merchant, setMerchant] = useState(""); // מפתח בית עסק לסינון היומן
   const [search, setSearch] = useState("");
@@ -81,8 +79,7 @@ export function DetailView({ kind }: { kind: "expenses" | "income" }) {
     };
   }, [kind, reload]);
 
-  const accounts = useMemo(() => Array.from(new Set((entries ?? []).map((e) => e.account))).sort(), [entries]);
-  const scoped = useMemo(() => (entries ?? []).filter((e) => !account || e.account === account), [entries, account]);
+  const scoped = useMemo(() => entries ?? [], [entries]);
 
   const monthTotals = useMemo(() => {
     const m = new Map<string, { total: number; count: number }>();
@@ -173,7 +170,7 @@ export function DetailView({ kind }: { kind: "expenses" | "income" }) {
 
   async function deleteBatch(b: Batch) {
     const name = b.fileName || "הקובץ הזה";
-    if (!confirm(`למחוק את ${name} (חשבון ${b.account})? יימחקו כל התנועות שנוצרו ממנו בפירוט הוצאות והכנסות. אי אפשר לשחזר.`)) return;
+    if (!confirm(`למחוק את ${name} ? יימחקו כל התנועות שנוצרו ממנו בפירוט הוצאות והכנסות. אי אפשר לשחזר.`)) return;
     const res = await fetch(`/api/detail?batch=${encodeURIComponent(b.id)}`, { method: "DELETE" });
     if (!res.ok) {
       setError("מחיקת הקובץ נכשלה");
@@ -187,7 +184,7 @@ export function DetailView({ kind }: { kind: "expenses" | "income" }) {
   const maxMerchant = merchants[0]?.total || 1;
   const maxMonth = Math.max(1, ...monthTotals.map((m) => m.total));
   const shownMerchants = showAllMerchants ? merchants : merchants.slice(0, TOP_MERCHANTS);
-  const importHref = `/import?mode=detail${account ? `&account=${encodeURIComponent(account)}` : ""}`;
+  const importHref = "/import?mode=detail";
   const delta = prevTotal !== null && prevTotal > 0 ? ((stats.total - prevTotal) / prevTotal) * 100 : null;
 
   return (
@@ -212,7 +209,7 @@ export function DetailView({ kind }: { kind: "expenses" | "income" }) {
       {entries && entries.length === 0 && (
         <div className="card p-6 text-center space-y-3">
           <p className="font-medium">עוד לא הועלו קבצי פירוט</p>
-          <p className="text-sm text-slate-500">העלה קובץ בנק או אשראי, הזן שם חשבון (למשל משפחת סיני) ונבנה כאן את הסקירה והיומן.</p>
+          <p className="text-sm text-slate-500">העלה קובץ בנק או אשראי ונבנה כאן את הסקירה והיומן.</p>
           <Link href={importHref} className="btn-primary inline-flex items-center gap-1">
             <Upload size={16} /> העלאת קובץ
           </Link>
@@ -238,25 +235,6 @@ export function DetailView({ kind }: { kind: "expenses" | "income" }) {
                 </option>
               ))}
             </select>
-            {accounts.length > 1 && (
-              <select
-                className="input flex-1"
-                value={account}
-                onChange={(e) => {
-                  setAccount(e.target.value);
-                  setMonth("");
-                  setMerchant("");
-                  setVisible(LEDGER_PAGE);
-                }}
-              >
-                <option value="">כל החשבונות</option>
-                {accounts.map((a) => (
-                  <option key={a} value={a}>
-                    {a}
-                  </option>
-                ))}
-              </select>
-            )}
           </div>
 
           <section className="card p-4 space-y-3">
@@ -402,7 +380,6 @@ export function DetailView({ kind }: { kind: "expenses" | "income" }) {
                   <div key={e.id} className="flex items-center justify-between gap-3 py-1.5 text-sm">
                     <div className="min-w-0">
                       <p className="truncate">{e.title}</p>
-                      {accounts.length > 1 && <p className="text-[11px] text-slate-400">{e.account}</p>}
                     </div>
                     <span className={`font-medium shrink-0 ${tone}`}>{formatCurrency(e.amount)}</span>
                   </div>
@@ -427,7 +404,7 @@ export function DetailView({ kind }: { kind: "expenses" | "income" }) {
               <div className="flex-1 min-w-0">
                 <p className="font-medium truncate">{b.fileName || "ייבוא"}</p>
                 <p className="text-xs text-slate-500">
-                  חשבון {b.account} · יובא {new Date(b.importedAt).toLocaleDateString("he-IL")} · תנועות מ-{b.from.split("-").reverse().join(".")} עד {b.to.split("-").reverse().join(".")}
+                  יובא {new Date(b.importedAt).toLocaleDateString("he-IL")} · תנועות מ-{b.from.split("-").reverse().join(".")} עד {b.to.split("-").reverse().join(".")}
                 </p>
                 <p className="text-xs mt-0.5">
                   {b.expenses > 0 && <span className="text-red-700">הוצאות {b.expenses}</span>}
