@@ -59,6 +59,8 @@ export function DetailView({ kind }: { kind: "expenses" | "income" }) {
   const [showAllMerchants, setShowAllMerchants] = useState(false);
   const [visible, setVisible] = useState(LEDGER_PAGE);
   const [reload, setReload] = useState(0);
+  const [weekdayFilter, setWeekdayFilter] = useState<number | null>(null); // סינון היומן ליום בשבוע (מהסיכום)
+  const [highlightId, setHighlightId] = useState(""); // תנועה שמודגשת ביומן (למשל "התנועה הגדולה ביותר")
 
   useEffect(() => {
     let cancelled = false;
@@ -151,10 +153,11 @@ export function DetailView({ kind }: { kind: "expenses" | "income" }) {
       .filter((e) => {
         if (merchant && (normalizeTitle(e.title) || e.title.trim().toLowerCase()) !== merchant) return false;
         if (q && !e.title.toLowerCase().includes(q)) return false;
+        if (weekdayFilter !== null && weekday(e.date) !== weekdayFilter) return false;
         return true;
       })
       .sort((a, b) => b.date.localeCompare(a.date) || b.amount - a.amount);
-  }, [inScope, merchant, search]);
+  }, [inScope, merchant, search, weekdayFilter]);
 
   const ledgerGroups = useMemo(() => {
     const groups: { date: string; items: Entry[]; total: number }[] = [];
@@ -167,6 +170,19 @@ export function DetailView({ kind }: { kind: "expenses" | "income" }) {
     }
     return groups;
   }, [ledger, visible]);
+
+  // מעבר מהסיכום ליומן התנועות, עם הסינון המתאים
+  function showLedger(opts: { merchant?: string; weekday?: number | null; highlight?: string; clear?: boolean }) {
+    setMerchant(opts.clear ? "" : opts.merchant ?? "");
+    setWeekdayFilter(opts.weekday ?? null);
+    setHighlightId(opts.highlight ?? "");
+    setSearch("");
+    setVisible(LEDGER_PAGE);
+    setTimeout(() => document.getElementById("detail-ledger")?.scrollIntoView({ behavior: "smooth", block: "start" }), 50);
+  }
+  function scrollTo(id: string) {
+    document.getElementById(id)?.scrollIntoView({ behavior: "smooth", block: "start" });
+  }
 
   async function deleteBatch(b: Batch) {
     const name = b.fileName || "הקובץ הזה";
@@ -252,32 +268,49 @@ export function DetailView({ kind }: { kind: "expenses" | "income" }) {
               )}
             </div>
             <div className="grid grid-cols-2 gap-2 text-sm">
-              <Stat label="מספר תנועות" value={String(stats.count)} />
-              <Stat label="ממוצע לתנועה" value={formatCurrency(stats.count ? stats.total / stats.count : 0)} />
-              <Stat label="בתי עסק שונים" value={String(merchants.length)} />
+              <Stat label="מספר תנועות" value={String(stats.count)} onClick={() => showLedger({ clear: true })} />
+              <Stat label="ממוצע לתנועה" value={formatCurrency(stats.count ? stats.total / stats.count : 0)} onClick={() => showLedger({ clear: true })} />
+              <Stat label="בתי עסק שונים" value={String(merchants.length)} onClick={() => scrollTo("detail-merchants")} />
               {activeMonth === "all" ? (
-                <Stat label="ממוצע חודשי" value={formatCurrency(stats.monthsWithData ? stats.total / stats.monthsWithData : 0)} />
+                <Stat
+                  label="ממוצע חודשי"
+                  value={formatCurrency(stats.monthsWithData ? stats.total / stats.monthsWithData : 0)}
+                  onClick={() => scrollTo("detail-months")}
+                />
               ) : (
-                <Stat label="ממוצע ליום" value={formatCurrency(stats.total / daysInMonth(activeMonth))} />
+                <Stat label="ממוצע ליום" value={formatCurrency(stats.total / daysInMonth(activeMonth))} onClick={() => showLedger({ clear: true })} />
               )}
               {stats.biggest && (
                 <Stat
                   label="התנועה הגדולה ביותר"
                   value={formatCurrency(stats.biggest.amount)}
                   sub={`${stats.biggest.title} · ${dmy(stats.biggest.date)}`}
+                  onClick={() =>
+                    showLedger({ merchant: normalizeTitle(stats.biggest!.title) || stats.biggest!.title.trim().toLowerCase(), highlight: stats.biggest!.id })
+                  }
                 />
               )}
-              {merchants[0] && <Stat label="בית העסק המוביל" value={merchants[0].name} sub={formatCurrency(merchants[0].total)} />}
-              {stats.topWeekday >= 0 && <Stat label={`יום ${isExpense ? "ההוצאה" : "ההכנסה"} המרכזי`} value={`יום ${WEEKDAYS[stats.topWeekday]}`} />}
+              {merchants[0] && (
+                <Stat label="בית העסק המוביל" value={merchants[0].name} sub={formatCurrency(merchants[0].total)} onClick={() => showLedger({ merchant: merchants[0].key })} />
+              )}
+              {stats.topWeekday >= 0 && (
+                <Stat
+                  label={`יום ${isExpense ? "ההוצאה" : "ההכנסה"} המרכזי`}
+                  value={`יום ${WEEKDAYS[stats.topWeekday]}`}
+                  onClick={() => showLedger({ weekday: stats.topWeekday })}
+                />
+              )}
               {(() => {
                 const freq = [...merchants].sort((a, b) => b.count - a.count)[0];
-                return freq ? <Stat label="הכי הרבה תנועות" value={freq.name} sub={`${freq.count} תנועות`} /> : null;
+                return freq ? (
+                  <Stat label="הכי הרבה תנועות" value={freq.name} sub={`${freq.count} תנועות`} onClick={() => showLedger({ merchant: freq.key })} />
+                ) : null;
               })()}
             </div>
           </section>
 
           {monthTotals.length > 1 && (
-            <section className="card p-4 space-y-2">
+            <section id="detail-months" className="card p-4 space-y-2 scroll-mt-16">
               <h2 className="font-bold">סיכום לפי חודש</h2>
               {monthTotals.slice(0, 12).map((m) => (
                 <button
@@ -286,6 +319,8 @@ export function DetailView({ kind }: { kind: "expenses" | "income" }) {
                   onClick={() => {
                     setMonth(m.month);
                     setMerchant("");
+                    setWeekdayFilter(null);
+                    setHighlightId("");
                     setVisible(LEDGER_PAGE);
                   }}
                   className={`w-full text-right rounded-lg px-2 py-1.5 ${m.month === activeMonth ? "bg-slate-100" : "hover:bg-slate-50"}`}
@@ -302,7 +337,7 @@ export function DetailView({ kind }: { kind: "expenses" | "income" }) {
             </section>
           )}
 
-          <section className="card p-4 space-y-2">
+          <section id="detail-merchants" className="card p-4 space-y-2 scroll-mt-16">
             <h2 className="font-bold">
               בתי עסק · {activeMonth === "all" ? "כל התקופה" : monthLabel(activeMonth)} (מהגבוה לנמוך)
             </h2>
@@ -311,10 +346,7 @@ export function DetailView({ kind }: { kind: "expenses" | "income" }) {
               <button
                 key={g.key}
                 type="button"
-                onClick={() => {
-                  setMerchant(merchant === g.key ? "" : g.key);
-                  setVisible(LEDGER_PAGE);
-                }}
+                onClick={() => (merchant === g.key ? showLedger({ clear: true }) : showLedger({ merchant: g.key }))}
                 className={`w-full text-right rounded-lg px-2 py-1.5 ${merchant === g.key ? "bg-teal-50 ring-1 ring-teal-300" : "hover:bg-slate-50"}`}
               >
                 <div className="flex justify-between gap-2 text-sm">
@@ -341,7 +373,7 @@ export function DetailView({ kind }: { kind: "expenses" | "income" }) {
             )}
           </section>
 
-          <section className="card p-4 space-y-3">
+          <section id="detail-ledger" className="card p-4 space-y-3 scroll-mt-16">
             <div className="flex items-center justify-between gap-2">
               <h2 className="font-bold">יומן תנועות</h2>
               <span className="text-xs text-slate-400">{ledger.length} תנועות</span>
@@ -367,6 +399,15 @@ export function DetailView({ kind }: { kind: "expenses" | "income" }) {
                 {merchants.find((g) => g.key === merchant)?.name ?? "בית עסק"} <X size={12} />
               </button>
             )}
+            {weekdayFilter !== null && (
+              <button
+                type="button"
+                onClick={() => setWeekdayFilter(null)}
+                className="inline-flex items-center gap-1 rounded-full bg-teal-50 text-teal-800 text-xs px-3 py-1 mr-2"
+              >
+                יום {WEEKDAYS[weekdayFilter]} <X size={12} />
+              </button>
+            )}
             {ledgerGroups.length === 0 && <p className="text-sm text-slate-400">אין תנועות להצגה.</p>}
             {ledgerGroups.map((g) => (
               <div key={g.date}>
@@ -377,7 +418,7 @@ export function DetailView({ kind }: { kind: "expenses" | "income" }) {
                   <span>{formatCurrency(g.total)}</span>
                 </div>
                 {g.items.map((e) => (
-                  <div key={e.id} className="flex items-center justify-between gap-3 py-1.5 text-sm">
+                  <div key={e.id} className={`flex items-center justify-between gap-3 py-1.5 text-sm ${e.id === highlightId ? "bg-amber-50 ring-1 ring-amber-300 rounded-lg px-2" : ""}`}>
                     <div className="min-w-0">
                       <p className="truncate">{e.title}</p>
                     </div>
@@ -433,12 +474,18 @@ function daysInMonth(m: string) {
   return new Date(y, mo, 0).getDate();
 }
 
-function Stat({ label, value, sub }: { label: string; value: string; sub?: string }) {
-  return (
-    <div className="rounded-xl bg-slate-50 px-3 py-2 min-w-0">
+function Stat({ label, value, sub, onClick }: { label: string; value: string; sub?: string; onClick?: () => void }) {
+  const body = (
+    <>
       <p className="text-[11px] text-slate-500">{label}</p>
       <p className="font-semibold truncate">{value}</p>
       {sub && <p className="text-[11px] text-slate-400 truncate">{sub}</p>}
-    </div>
+    </>
+  );
+  if (!onClick) return <div className="rounded-xl bg-slate-50 px-3 py-2 min-w-0">{body}</div>;
+  return (
+    <button type="button" onClick={onClick} className="rounded-xl bg-slate-50 hover:bg-slate-100 active:bg-slate-200 px-3 py-2 min-w-0 text-right">
+      {body}
+    </button>
   );
 }
