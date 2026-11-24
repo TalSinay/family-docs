@@ -15,6 +15,7 @@ import { RecurringExpenses } from "@/components/RecurringExpenses";
 import { MonthlyFlowChart } from "@/components/MonthlyFlowChart";
 import { FinanceOverview, FinanceDoc } from "@/components/FinanceOverview";
 import { DEFAULT_SUBCATEGORIES, MAIN_CATEGORIES, MainCategory } from "@/lib/categories";
+import { ChevronLeft } from "lucide-react";
 import clsx from "clsx";
 
 export const dynamic = "force-dynamic";
@@ -106,6 +107,16 @@ export default async function CategoryPage({
         </div>
         <h1 className="text-xl font-bold">{category}</h1>
       </div>
+
+      {(category === "הוצאות" || category === "הכנסות") && (
+        <Link
+          href={category === "הוצאות" ? "/detail/expenses" : "/detail/income"}
+          className="card p-3 flex items-center justify-between text-sm font-medium text-teal-800 hover:bg-teal-50"
+        >
+          <span>{category === "הוצאות" ? "פירוט הוצאות - בתי עסק, מובילים בכל חודש ויומן תנועות" : "פירוט הכנסות - מקורות, סיכומים ויומן תנועות"}</span>
+          <ChevronLeft size={18} />
+        </Link>
+      )}
 
       {subcategories.length > 0 && (
         <div className="flex gap-2 overflow-x-auto pb-1 -mx-1 px-1">

@@ -98,6 +98,10 @@ export default function ImportPage() {
   const [counts, setCounts] = useState<{ expenses: number; income: number } | null>(null);
   const [clearScope, setClearScope] = useState<"all" | "expenses" | "income">("all");
   const [clearing, setClearing] = useState(false);
+  // יעד הייבוא: "monthly" = הוצאות/הכנסות חודשיות (נספרות בסיכומים), "detail" = פירוט בלבד (עמודי פירוט הוצאות/הכנסות, לא נספר בסיכומים)
+  const [target, setTarget] = useState<"monthly" | "detail">("monthly");
+  const [account, setAccount] = useState("");
+  const [knownAccounts, setKnownAccounts] = useState<string[]>([]);
   const [backedUp, setBackedUp] = useState(false);
   const [restoring, setRestoring] = useState(false);
   const [restoreMsg, setRestoreMsg] = useState("");
@@ -117,6 +121,23 @@ export default function ImportPage() {
     // eslint-disable-next-line react-hooks/set-state-in-effect -- טעינת רשימת הייבואים בעליית העמוד
     loadBatches();
   }, [loadBatches]);
+
+  useEffect(() => {
+    // כניסה מעמודי הפירוט: /import?mode=detail (ושם חשבון אחרון/שנבחר)
+    const sp = new URLSearchParams(window.location.search);
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- קריאת פרמטרי כתובת אחרי הטעינה (למניעת אי-התאמת hydration)
+    if (sp.get("mode") === "detail") setTarget("detail");
+    const acc = sp.get("account");
+    if (acc) setAccount(acc);
+    fetch("/api/detail?batches=1")
+      .then((r) => (r.ok ? r.json() : []))
+      .then((list: { account: string }[]) => {
+        const names = Array.from(new Set(list.map((b) => b.account)));
+        setKnownAccounts(names);
+        if (!acc && names.length === 1) setAccount(names[0]);
+      })
+      .catch(() => {});
+  }, []);
 
   async function deleteBatch(b: ImportBatch) {
     const name = b.fileName || "הייבוא הזה";
@@ -336,14 +357,26 @@ export default function ImportPage() {
     setSubmitting(true);
     setSubmitError("");
     try {
-      const res = await fetch("/api/documents/import", {
+      if (target === "detail" && !account.trim()) {
+        setSubmitError("צריך להזין שם חשבון (למשל משפחת סיני)");
+        return;
+      }
+      const res = await fetch(target === "detail" ? "/api/detail/import" : "/api/documents/import", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          fileName: fileName || undefined,
-          subcategory: subcategory.trim() || undefined,
-          entries: entries.map((e) => ({ title: e.title, amount: e.amount, date: e.date, category: e.kind })),
-        }),
+        body: JSON.stringify(
+          target === "detail"
+            ? {
+                fileName: fileName || undefined,
+                account: account.trim(),
+                entries: entries.map((e) => ({ title: e.title, amount: e.amount, date: e.date, kind: e.kind })),
+              }
+            : {
+                fileName: fileName || undefined,
+                subcategory: subcategory.trim() || undefined,
+                entries: entries.map((e) => ({ title: e.title, amount: e.amount, date: e.date, category: e.kind })),
+              }
+        ),
       });
       const data = await res.json().catch(() => ({}));
       if (!res.ok) {
@@ -363,6 +396,29 @@ export default function ImportPage() {
         <ArrowRight size={16} /> חזרה לדשבורד
       </Link>
 
+      <div className="flex rounded-xl bg-slate-100 p-1 text-sm">
+        {(
+          [
+            ["monthly", "הוצאות/הכנסות חודשיות"],
+            ["detail", "פירוט בלבד (לא נספר בסיכומים)"],
+          ] as const
+        ).map(([k, label]) => (
+          <button
+            key={k}
+            type="button"
+            onClick={() => setTarget(k)}
+            className={`flex-1 rounded-lg py-1.5 font-medium ${target === k ? "bg-white shadow text-slate-900" : "text-slate-500"}`}
+          >
+            {label}
+          </button>
+        ))}
+      </div>
+      {target === "detail" && (
+        <div className="rounded-xl bg-indigo-50 text-indigo-900 px-4 py-3 text-sm">
+          מצב פירוט: התנועות נשמרות רק לעמודי &quot;פירוט הוצאות&quot; ו&quot;פירוט הכנסות&quot; ולא נספרות בהוצאות/הכנסות החודשיות, בדשבורד או בדוחות.
+        </div>
+      )}
+
       <div>
         <h1 className="text-xl font-bold">📥 ייבוא הוצאות והכנסות מקובץ (בנק או אשראי)</h1>
         <p className="text-sm text-slate-500 mt-1">
@@ -371,12 +427,13 @@ export default function ImportPage() {
         </p>
       </div>
 
-      {lastImportedDate && (
+      {target === "monthly" && lastImportedDate && (
         <div className="rounded-xl bg-teal-50 text-teal-900 px-4 py-3 text-sm">
           הייבוא הקודם היה עד לתאריך <span className="font-bold">{lastImportedDate.split("-").reverse().join(".")}</span> - בפעם הבאה אפשר לקחת מהקובץ תנועות מהתאריך הזה ואילך (רשומות כפולות מזוהות ולא יוכנסו שוב).
         </div>
       )}
 
+      {target === "monthly" && (
       <section className="card p-5 space-y-3">
         <h2 className="font-bold text-lg">קבצים שיובאו</h2>
         <p className="text-xs text-slate-500">מחיקה מסירה את כל ההוצאות וההכנסות שנוצרו מאותו קובץ, למקרה של טעות.</p>
@@ -407,7 +464,9 @@ export default function ImportPage() {
           </div>
         ))}
       </section>
+      )}
 
+      {target === "monthly" && (
       <section className="card p-5 space-y-3 border-red-100">
         <h2 className="font-bold text-lg">ניקוי הוצאות והכנסות</h2>
         <p className="text-xs text-slate-500">
@@ -454,6 +513,7 @@ export default function ImportPage() {
           <p className="text-xs text-slate-400 mt-1">הגיבוי כולל תאריך, סוג, תיאור, סכום ותת-קטגוריה. קבצים שצורפו ידנית לרשומות לא נכללים בו.</p>
         </div>
       </section>
+      )}
 
       <section className="card p-5 space-y-4">
         <div>
@@ -554,15 +614,34 @@ export default function ImportPage() {
                   )}
                 </div>
               )}
-              <div>
-                <label className="label">תת-קטגוריה (אופציונלי)</label>
-                <input
-                  className="input"
-                  value={subcategory}
-                  onChange={(e) => setSubcategory(e.target.value)}
-                  placeholder="לדוגמה: Max"
-                />
-              </div>
+              {target === "detail" ? (
+                <div>
+                  <label className="label">שם החשבון</label>
+                  <input
+                    className="input"
+                    list="detail-accounts"
+                    value={account}
+                    onChange={(e) => setAccount(e.target.value)}
+                    placeholder="לדוגמה: משפחת סיני"
+                  />
+                  <datalist id="detail-accounts">
+                    {knownAccounts.map((a) => (
+                      <option key={a} value={a} />
+                    ))}
+                  </datalist>
+                  <p className="text-xs text-slate-400 mt-1">אפשר להעלות כמה חשבונות ולסנן ביניהם בעמודי הפירוט.</p>
+                </div>
+              ) : (
+                <div>
+                  <label className="label">תת-קטגוריה (אופציונלי)</label>
+                  <input
+                    className="input"
+                    value={subcategory}
+                    onChange={(e) => setSubcategory(e.target.value)}
+                    placeholder="לדוגמה: Max"
+                  />
+                </div>
+              )}
             </div>
           </section>
 
@@ -624,7 +703,7 @@ export default function ImportPage() {
               {!result ? (
                 <button
                   onClick={submitImport}
-                  disabled={entries.length === 0 || submitting}
+                  disabled={entries.length === 0 || submitting || (target === "detail" && !account.trim())}
                   className="btn-primary flex items-center gap-2 disabled:opacity-60"
                 >
                   <Upload size={16} />
@@ -640,11 +719,11 @@ export default function ImportPage() {
                       {result.skipped > 0 && ` (${result.skipped} דולגו - כבר קיימות)`}.
                     </p>
                     <div className="flex gap-4">
-                      <Link href="/category/%D7%94%D7%95%D7%A6%D7%90%D7%95%D7%AA" className="underline font-medium">
-                        מעבר להוצאות
+                      <Link href={target === "detail" ? "/detail/expenses" : "/category/%D7%94%D7%95%D7%A6%D7%90%D7%95%D7%AA"} className="underline font-medium">
+                        {target === "detail" ? "מעבר לפירוט הוצאות" : "מעבר להוצאות"}
                       </Link>
-                      <Link href="/category/%D7%94%D7%9B%D7%A0%D7%A1%D7%95%D7%AA" className="underline font-medium">
-                        מעבר להכנסות
+                      <Link href={target === "detail" ? "/detail/income" : "/category/%D7%94%D7%9B%D7%A0%D7%A1%D7%95%D7%AA"} className="underline font-medium">
+                        {target === "detail" ? "מעבר לפירוט הכנסות" : "מעבר להכנסות"}
                       </Link>
                     </div>
                   </div>
