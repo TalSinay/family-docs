@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { useSession } from "next-auth/react";
 import Link from "next/link";
-import { ChevronRight, ChevronLeft, TrendingDown, TrendingUp, Scale, BarChart3, Upload, AlertCircle, ListChecks, Bell, ShoppingCart, Plus } from "lucide-react";
+import { ChevronRight, ChevronLeft, TrendingDown, TrendingUp, Scale, BarChart3, Upload, AlertCircle, ListChecks, Bell, ShoppingCart, Plus, Sparkles } from "lucide-react";
 import { DocumentCard } from "@/components/DocumentCard";
 import { EmptyState } from "@/components/EmptyState";
 import { ListSkeleton } from "@/components/Skeleton";
@@ -248,6 +248,9 @@ export default function DashboardPage() {
           </Link>
           <Link href="/reports" className="flex items-center gap-1 text-xs text-teal-700 font-medium">
             <BarChart3 size={14} /> דוחות שנתיים וטווח מותאם
+          </Link>
+          <Link href="/insights" className="flex items-center gap-1 text-xs text-teal-700 font-medium">
+            <Sparkles size={14} /> תובנות
           </Link>
         </div>
       </div>
