@@ -271,3 +271,7 @@ scripts/
 ### אבחון התראות
 
 בעמוד ההתראות מוצג מתי ה-cron פנה לשרת לאחרונה (`AppSettings.lastCronRunAt`); אם עברו יותר מ-90 דקות מופיעה אזהרה. מעבר ל-GitHub Actions (שעלול לרוץ בפערים של שעות) נוסף `vercel.json` עם Vercel Cron יומי כגיבוי (`GET /api/cron/daily-reminders`, דורש משתנה `CRON_SECRET` ב-Vercel; בתוכנית חינמית רק פעם ביום). לתזמון תכוף ואמין מומלץ cron חיצוני (למשל cron-job.org) שמבצע POST עם `Authorization: Bearer <CRON_SECRET>` כל 5-10 דקות.
+
+### בדיקת התראות (push)
+
+בעמוד ההתראות יש בדיקה עצמית: האם מפתחות VAPID מוגדרים בשרת, כמה מכשירים רשומים להתראות אצלך, וכפתור "שלח התראת בדיקה" שמחזיר מה קרה בפועל. ה-cron לא מסמן התראות כ"נשלחו" כשאין VAPID (מחזיר 503 עם הסבר), ותשובתו כוללת `push: {devices, delivered, failed}`. ה-workflow מדפיס את התשובה בלוג.

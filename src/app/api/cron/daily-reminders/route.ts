@@ -7,7 +7,7 @@ import MonthlyReminder from "@/lib/models/MonthlyReminder";
 import WorkspaceMembership from "@/lib/models/WorkspaceMembership";
 import AppSettings from "@/lib/models/AppSettings";
 import NotificationLog from "@/lib/models/NotificationLog";
-import { sendPushToUsers } from "@/lib/push";
+import { sendPushToUsers, isPushConfigured } from "@/lib/push";
 import { DEFAULT_NOTIFICATION_TIME, israelNow } from "@/lib/israelTime";
 
 // כמה ימים מראש להתריע על dueDate מתקרב של מסמך (בנוסף להתראה ביום עצמו)
@@ -28,6 +28,14 @@ async function handle(req: NextRequest) {
   const expected = `Bearer ${process.env.CRON_SECRET}`;
   if (!process.env.CRON_SECRET || authHeader !== expected) {
     return NextResponse.json({ error: "לא מורשה" }, { status: 401 });
+  }
+
+  // בלי מפתחות VAPID אי אפשר לשלוח push בכלל. לא מסמנים שום דבר כ"נשלח" כדי שההתראות יישלחו אחרי התיקון.
+  if (!isPushConfigured()) {
+    return NextResponse.json(
+      { error: "VAPID לא מוגדר בשרת (NEXT_PUBLIC_VAPID_PUBLIC_KEY / VAPID_PRIVATE_KEY ב-Vercel). לא נשלחו התראות.", pushReady: false },
+      { status: 503 }
+    );
   }
 
   await connectToDatabase();
@@ -61,6 +69,7 @@ async function handle(req: NextRequest) {
   // כל פריט (משימה / תאריך יעד של מסמך / תזכורת חודשית) נשלח בפעם הראשונה שהשעה הנוכחית
   // הגיעה לשעה שנקבעה לו (notifyTime, או השעה הגלובלית אם לא נקבעה), ומסומן כ"נשלח היום"
   // באופן אטומי כדי שריצות חופפות לא ישלחו פעמיים. כל שליחה נרשמת ביומן ההתראות.
+  const pushTotals: { devices: number; delivered: number; failed: number; lastError?: string } = { devices: 0, delivered: 0, failed: 0 };
   type Model = typeof Task | typeof DocumentModel | typeof MonthlyReminder | typeof CalendarEvent;
   async function claim(model: Model, id: unknown, field: "lastNotifiedOn" | "lastSentOn") {
     const res = await (model as typeof Task).updateOne(
@@ -75,7 +84,11 @@ async function handle(req: NextRequest) {
     payload: { title: string; body: string; url: string }
   ) {
     const members = membersByWorkspace.get(workspaceId) || [];
-    await sendPushToUsers(members, payload);
+    const r = await sendPushToUsers(members, payload);
+    pushTotals.devices += r.devices;
+    pushTotals.delivered += r.delivered;
+    pushTotals.failed += r.failed;
+    if (r.lastError) pushTotals.lastError = r.lastError;
     await NotificationLog.create({ workspaceId, kind, ...payload });
     sentCount++;
   }
@@ -161,6 +174,7 @@ async function handle(req: NextRequest) {
 
   return NextResponse.json({
     today,
+    push: pushTotals,
     calendarEvents: eventsSent,
     overdueTasks: tasksSent,
     approachingDocs: docsSent,

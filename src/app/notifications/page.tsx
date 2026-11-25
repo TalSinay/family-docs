@@ -243,6 +243,8 @@ export default function NotificationsPage() {
         </button>
       </div>
 
+      <PushCheck />
+
       {data && (() => {
         const ageMin = data.cronAgeMinutes ?? null;
         const stale = ageMin === null || ageMin > 90;
@@ -476,6 +478,59 @@ export default function NotificationsPage() {
           </section>
         </>
       )}
+    </div>
+  );
+}
+
+// בדיקת התראות: האם השרת מוגדר, כמה מכשירים רשומים, ושליחת התראת בדיקה
+function PushCheck() {
+  const [status, setStatus] = useState<{ vapidConfigured: boolean; devices: number } | null>(null);
+  const [result, setResult] = useState("");
+  const [busy, setBusy] = useState(false);
+
+  useEffect(() => {
+    fetch("/api/push/test")
+      .then((r) => (r.ok ? r.json() : null))
+      .then(setStatus)
+      .catch(() => {});
+  }, []);
+
+  async function sendTest() {
+    setBusy(true);
+    setResult("");
+    try {
+      const res = await fetch("/api/push/test", { method: "POST" });
+      const r = await res.json();
+      if (!res.ok) throw new Error();
+      if (!r.configured) setResult("השרת לא מוגדר לשליחת התראות: חסרים מפתחות VAPID ב-Vercel.");
+      else if (r.devices === 0) setResult("אין מכשיר רשום להתראות. הפעל התראות בעמוד הפרופיל במכשיר הזה.");
+      else if (r.delivered > 0) setResult(`נשלחה התראה ל-${r.delivered} מכשירים${r.failed ? `, ${r.failed} נכשלו` : ""}. אם לא הופיעה, בדוק את הרשאות ההתראות של הדפדפן/המכשיר.`);
+      else setResult(`השליחה נכשלה בכל ${r.failed} המכשירים${r.lastError ? ` (${r.lastError})` : ""}.`);
+    } catch {
+      setResult("הבדיקה נכשלה");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  const problem = status && (!status.vapidConfigured || status.devices === 0);
+  return (
+    <div className={`rounded-xl px-3 py-2 text-xs space-y-2 ${problem ? "bg-amber-50 text-amber-800" : "bg-slate-50 text-slate-600"}`}>
+      <p>
+        {status
+          ? `שרת התראות: ${status.vapidConfigured ? "מוגדר" : "לא מוגדר (חסר VAPID)"} · מכשירים רשומים אצלך: ${status.devices}`
+          : "בודק מצב התראות..."}
+        {status && status.devices === 0 && " · "}
+        {status && status.devices === 0 && (
+          <Link href="/profile" className="underline">
+            הפעלת התראות בפרופיל
+          </Link>
+        )}
+      </p>
+      <button type="button" disabled={busy} onClick={sendTest} className="px-3 py-1.5 rounded-lg bg-white border border-slate-300 font-medium disabled:opacity-50">
+        {busy ? "שולח..." : "שלח התראת בדיקה"}
+      </button>
+      {result && <p className="font-medium">{result}</p>}
     </div>
   );
 }
