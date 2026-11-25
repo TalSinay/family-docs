@@ -13,5 +13,10 @@ jobs:
     steps:
       - name: Call daily reminders endpoint
         run: |
-          curl -sf -X POST "${{ secrets.APP_URL }}/api/cron/daily-reminders" \
-            -H "Authorization: Bearer ${{ secrets.CRON_SECRET }}"
+          # מדפיס את תשובת השרת (כמה התראות נשלחו) ונכשל אם הסטטוס אינו 2xx, כדי שיהיה אפשר לאבחן
+          code=$(curl -s -o response.json -w "%{http_code}" -X POST "${{ secrets.APP_URL }}/api/cron/daily-reminders" \
+            -H "Authorization: Bearer ${{ secrets.CRON_SECRET }}")
+          echo "HTTP $code"
+          cat response.json
+          echo
+          [ "$code" -ge 200 ] && [ "$code" -lt 300 ]
