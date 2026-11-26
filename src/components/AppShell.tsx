@@ -4,7 +4,7 @@ import { usePathname } from "next/navigation";
 import { useSession, signOut } from "next-auth/react";
 import { ReactNode, useEffect, useRef } from "react";
 import Link from "next/link";
-import { LogOut, RefreshCw, Search, ShieldCheck, UserCircle } from "lucide-react";
+import { LogOut, RefreshCw, Search, ShieldCheck, Sparkles, UserCircle } from "lucide-react";
 import { BottomBar } from "./BottomBar";
 import { WorkspaceSwitcher } from "./WorkspaceSwitcher";
 
@@ -58,6 +58,14 @@ export function AppShell({ children }: { children: ReactNode }) {
                 title="חיפוש"
               >
                 <Search size={16} />
+              </Link>
+              <Link
+                href="/insights"
+                className="p-1.5 rounded-full hover:bg-slate-100 shrink-0"
+                aria-label="תובנות"
+                title="תובנות"
+              >
+                <Sparkles size={16} />
               </Link>
               <Link
                 href="/profile"
